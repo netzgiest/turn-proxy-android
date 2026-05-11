@@ -18,6 +18,8 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.freeturn.app.data.AppPreferences
+import com.freeturn.app.data.DnsMode
+import com.freeturn.app.domain.server.KCP_FEC_VALUE
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -196,6 +198,19 @@ class ProxyService : Service() {
                     cmdArgs.add("-dns-servers"); cmdArgs.add(dns)
                 }
             }
+            if (cfg.dnsMode == DnsMode.UDP || cfg.dnsMode == DnsMode.DOH) {
+                cmdArgs.add("-dns"); cmdArgs.add(cfg.dnsMode)
+            }
+            if (cfg.forcePort443) { cmdArgs.add("-port"); cmdArgs.add("443") }
+            // Альтернативный TURN-узел: переключает клиент на указанный server-side relay
+            // вместо автоподбора. Адрес задаётся пользователем, флаг работает только при
+            // непустом значении (иначе ядро запустится без -turn и будет автоподбор).
+            if (cfg.magicSwitch) {
+                val turn = cfg.magicTurn.trim()
+                if (turn.isNotEmpty()) {
+                    cmdArgs.add("-turn"); cmdArgs.add(turn)
+                }
+            }
         }
 
         var exitCode = -1
@@ -241,6 +256,10 @@ class ProxyService : Service() {
                 // в первую очередь.
                 pb.environment()["VK_PROFILE_PATH"] =
                     File(filesDir, "vk_profile.json").absolutePath
+                // KCP FEC — должно совпадать с сервером. Включается из ServerOpts.
+                if (srv.kcpFec) {
+                    pb.environment()["VK_TURN_KCP_FEC"] = KCP_FEC_VALUE
+                }
                 // CWD тоже подменяем на writeable dir — на случай если Go-код или его
                 // зависимости пишут что-то относительными путями (логи кеша tls-client и т.п.).
                 pb.directory(filesDir)

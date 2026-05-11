@@ -70,7 +70,11 @@ internal object ProfileJson {
             put("captchaSolver", p.client.captchaSolver)
             put("debugMode", p.client.debugMode)
             put("useCarrierDns", p.client.useCarrierDns)
+            put("dnsMode", p.client.dnsMode)
+            put("forcePort443", p.client.forcePort443)
             put("syncServerSwitches", p.client.syncServerSwitches)
+            put("magicSwitch", p.client.magicSwitch)
+            put("magicTurn", p.client.magicTurn)
         })
         put("proxyListen", p.proxyListen)
         put("proxyConnect", p.proxyConnect)
@@ -107,7 +111,13 @@ internal object ProfileJson {
                 },
                 debugMode = cliO.optBoolean("debugMode", false),
                 useCarrierDns = cliO.optBoolean("useCarrierDns", false),
-                syncServerSwitches = cliO.optBoolean("syncServerSwitches", true)
+                dnsMode = cliO.optString("dnsMode", DnsMode.AUTO).let {
+                    if (it in DnsMode.ALL) it else DnsMode.AUTO
+                },
+                forcePort443 = cliO.optBoolean("forcePort443", false),
+                syncServerSwitches = cliO.optBoolean("syncServerSwitches", true),
+                magicSwitch = cliO.optBoolean("magicSwitch", false),
+                magicTurn = cliO.optString("magicTurn")
             ),
             proxyListen = o.optString("proxyListen").ifBlank { "0.0.0.0:56000" },
             proxyConnect = o.optString("proxyConnect").ifBlank { "127.0.0.1:40537" }

@@ -30,6 +30,13 @@ data class SshConfig(
     val hostFingerprint: String = ""
 )
 
+object DnsMode {
+    const val AUTO = "auto"
+    const val UDP = "udp"
+    const val DOH = "doh"
+    val ALL = listOf(AUTO, UDP, DOH)
+}
+
 data class ClientConfig(
     val serverAddress: String = "",
     val vkLink: String = "",
@@ -48,12 +55,19 @@ data class ClientConfig(
     val debugMode: Boolean = false,
     // Если true — в argv передаётся -dns-servers с DNS активной сети (оператор связи).
     val useCarrierDns: Boolean = false,
+    // "auto" | "udp" | "doh" — соответствует флагу -dns ядра.
+    val dnsMode: String = DnsMode.AUTO,
+    // Если true — в argv ядра добавляется -port 443.
+    val forcePort443: Boolean = false,
     /**
      * Если true — изменения vlessMode/vlessBond/wrapEnabled на клиенте дёргают
      * рестарт сервера (текущее поведение). Если false — флаги меняются только
      * у клиента, серверный процесс не трогается.
      */
-    val syncServerSwitches: Boolean = true
+    val syncServerSwitches: Boolean = true,
+    val magicSwitch: Boolean = false,
+    /** Адрес для флага -turn ядра, если magicSwitch включён. Пусто = не передавать. */
+    val magicTurn: String = ""
 )
 
 class AppPreferences(context: Context) {
@@ -81,19 +95,20 @@ class AppPreferences(context: Context) {
         val CLIENT_CAPTCHA_SOLVER = stringPreferencesKey("client_captcha_solver")
         val CLIENT_DEBUG = booleanPreferencesKey("client_debug")
         val CLIENT_USE_CARRIER_DNS = booleanPreferencesKey("client_use_carrier_dns")
+        val CLIENT_DNS_MODE = stringPreferencesKey("client_dns_mode")
+        val CLIENT_FORCE_PORT_443 = booleanPreferencesKey("client_force_port_443")
         val CLIENT_SYNC_SERVER = booleanPreferencesKey("client_sync_server")
+        val CLIENT_MAGIC_SWITCH = booleanPreferencesKey("client_magic_switch")
+        val CLIENT_MAGIC_TURN = stringPreferencesKey("client_magic_turn")
         // Устаревшие ключи — не пишутся, но молча удаляются при saveClientConfig.
-        private val CLIENT_DNS_MODE_LEGACY = stringPreferencesKey("client_dns_mode")
         private val CLIENT_ALLOCS_PER_STREAM_LEGACY = intPreferencesKey("client_allocs_per_stream")
-
-        // Устаревший ключ из старой -port 443 фичи (обе семантики удалены).
-        private val CLIENT_FORCE_PORT_443_LEGACY = booleanPreferencesKey("client_force_port_443")
         private val CLIENT_TURN_PORT_443_LEGACY = booleanPreferencesKey("client_turn_port_443")
         val PROXY_LISTEN = stringPreferencesKey("proxy_listen")
         val PROXY_CONNECT = stringPreferencesKey("proxy_connect")
         // Серверные параметры (управляются на ServerManagementScreen).
         val SERVER_VLESS_BOND = booleanPreferencesKey("server_vless_bond")
         val SERVER_WRAP_ENABLED = booleanPreferencesKey("server_wrap_enabled")
+        val SERVER_KCP_FEC = booleanPreferencesKey("server_kcp_fec")
         // Ревизия — инкрементится при saveServerOpts. Нужна, чтобы Flow эмитил
         // обновление, когда меняется только wrap-key в EncryptedSharedPreferences
         // (DataStore сам по себе не видит этого изменения).
@@ -162,7 +177,13 @@ class AppPreferences(context: Context) {
                 },
                 debugMode = prefs[CLIENT_DEBUG] ?: false,
                 useCarrierDns = prefs[CLIENT_USE_CARRIER_DNS] ?: false,
-                syncServerSwitches = prefs[CLIENT_SYNC_SERVER] ?: true
+                dnsMode = (prefs[CLIENT_DNS_MODE] ?: DnsMode.AUTO).let {
+                    if (it in DnsMode.ALL) it else DnsMode.AUTO
+                },
+                forcePort443 = prefs[CLIENT_FORCE_PORT_443] ?: false,
+                syncServerSwitches = prefs[CLIENT_SYNC_SERVER] ?: true,
+                magicSwitch = prefs[CLIENT_MAGIC_SWITCH] ?: false,
+                magicTurn = prefs[CLIENT_MAGIC_TURN] ?: ""
             )
         }
 
@@ -182,7 +203,8 @@ class AppPreferences(context: Context) {
     data class ServerOpts(
         val vlessBond: Boolean = false,
         val wrapEnabled: Boolean = false,
-        val wrapKey: String = ""
+        val wrapKey: String = "",
+        val kcpFec: Boolean = false
     )
 
     val serverOptsFlow: Flow<ServerOpts> = context.dataStore.data
@@ -191,7 +213,8 @@ class AppPreferences(context: Context) {
             ServerOpts(
                 vlessBond = prefs[SERVER_VLESS_BOND] ?: false,
                 wrapEnabled = prefs[SERVER_WRAP_ENABLED] ?: false,
-                wrapKey = encryptedPrefs.getString("server_wrap_key", null) ?: ""
+                wrapKey = encryptedPrefs.getString("server_wrap_key", null) ?: "",
+                kcpFec = prefs[SERVER_KCP_FEC] ?: false
             )
         }
 
@@ -202,6 +225,7 @@ class AppPreferences(context: Context) {
         context.dataStore.edit { prefs ->
             prefs[SERVER_VLESS_BOND] = opts.vlessBond
             prefs[SERVER_WRAP_ENABLED] = opts.wrapEnabled
+            prefs[SERVER_KCP_FEC] = opts.kcpFec
             prefs[SERVER_OPTS_REV] = (prefs[SERVER_OPTS_REV] ?: 0) + 1
         }
     }
@@ -278,11 +302,13 @@ class AppPreferences(context: Context) {
             prefs[CLIENT_CAPTCHA_SOLVER] = config.captchaSolver
             prefs[CLIENT_DEBUG] = config.debugMode
             prefs[CLIENT_USE_CARRIER_DNS] = config.useCarrierDns
+            prefs[CLIENT_DNS_MODE] = if (config.dnsMode in DnsMode.ALL) config.dnsMode else DnsMode.AUTO
+            prefs[CLIENT_FORCE_PORT_443] = config.forcePort443
             prefs[CLIENT_SYNC_SERVER] = config.syncServerSwitches
-            // Удаляем устаревшие ключи, которые больше не использует ядро.
-            prefs.remove(CLIENT_FORCE_PORT_443_LEGACY)
+            prefs[CLIENT_MAGIC_SWITCH] = config.magicSwitch
+            prefs[CLIENT_MAGIC_TURN] = config.magicTurn.trim()
+            // Удаляем устаревшие ключи.
             prefs.remove(CLIENT_TURN_PORT_443_LEGACY)
-            prefs.remove(CLIENT_DNS_MODE_LEGACY)
             prefs.remove(CLIENT_ALLOCS_PER_STREAM_LEGACY)
         }
     }

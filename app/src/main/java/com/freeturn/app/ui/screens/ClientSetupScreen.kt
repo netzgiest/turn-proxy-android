@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.freeturn.app.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freeturn.app.data.ClientConfig
+import com.freeturn.app.data.DnsMode
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.viewmodel.MainViewModel
 import com.freeturn.app.viewmodel.SshConnectionState
@@ -97,9 +99,13 @@ fun ClientSetupScreen(
     var useUdp       by rememberSaveable(saved.useUdp)         { mutableStateOf(saved.useUdp) }
     var manualCaptcha by rememberSaveable(saved.manualCaptcha) { mutableStateOf(saved.manualCaptcha) }
     var useCarrierDns by rememberSaveable(saved.useCarrierDns) { mutableStateOf(saved.useCarrierDns) }
+    var dnsMode by rememberSaveable(saved.dnsMode) { mutableStateOf(saved.dnsMode) }
+    var forcePort443 by rememberSaveable(saved.forcePort443) { mutableStateOf(saved.forcePort443) }
     var localPort    by rememberSaveable(saved.localPort)      { mutableStateOf(saved.localPort) }
     var captchaSolver by rememberSaveable(saved.captchaSolver) { mutableStateOf(saved.captchaSolver) }
     var debugMode by rememberSaveable(saved.debugMode) { mutableStateOf(saved.debugMode) }
+    var magicSwitch by rememberSaveable(saved.magicSwitch) { mutableStateOf(saved.magicSwitch) }
+    var magicTurn by rememberSaveable(saved.magicTurn) { mutableStateOf(saved.magicTurn) }
     var lastSliderInt by rememberSaveable { mutableIntStateOf(saved.threads) }
     var lastStreamsInt by rememberSaveable { mutableIntStateOf(saved.streamsPerCred) }
 
@@ -113,7 +119,7 @@ fun ClientSetupScreen(
 
     // Авто-сохранение с дебаунсом 600 мс на каждое изменение поля.
     // vlessMode исключён — сохраняется через setVlessMode с автоперезапуском сервера.
-    LaunchedEffect(serverAddress, vkLink, threads, streamsPerCred, useUdp, manualCaptcha, useCarrierDns, localPort, captchaSolver, debugMode) {
+    LaunchedEffect(serverAddress, vkLink, threads, streamsPerCred, useUdp, manualCaptcha, useCarrierDns, localPort, captchaSolver, dnsMode, forcePort443, debugMode, magicSwitch, magicTurn) {
         delay(600)
         viewModel.saveClientConfig(
             ClientConfig(
@@ -128,7 +134,11 @@ fun ClientSetupScreen(
                 captchaSolver = captchaSolver,
                 debugMode     = debugMode,
                 useCarrierDns = useCarrierDns,
-                syncServerSwitches = saved.syncServerSwitches
+                dnsMode       = dnsMode,
+                forcePort443  = forcePort443,
+                syncServerSwitches = saved.syncServerSwitches,
+                magicSwitch   = magicSwitch,
+                magicTurn     = magicTurn.trim()
             )
         )
     }
@@ -253,6 +263,34 @@ fun ClientSetupScreen(
                     )
                 }
 
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column {
+                        Text(stringResource(R.string.dns_mode_title), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            stringResource(R.string.dns_mode_desc),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    val dnsOptions = listOf(
+                        DnsMode.AUTO to stringResource(R.string.dns_mode_auto),
+                        DnsMode.UDP to stringResource(R.string.dns_mode_udp),
+                        DnsMode.DOH to stringResource(R.string.dns_mode_doh)
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        dnsOptions.forEachIndexed { idx, (value, label) ->
+                            SegmentedButton(
+                                selected = dnsMode == value,
+                                onClick = {
+                                    HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
+                                    dnsMode = value
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = idx, count = dnsOptions.size)
+                            ) { Text(label) }
+                        }
+                    }
+                }
+
                 if (!effectiveVlessMode) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column {
@@ -329,6 +367,16 @@ fun ClientSetupScreen(
                 )
 
                 SwitchRow(
+                    label = stringResource(R.string.force_port_443),
+                    description = stringResource(R.string.force_port_443_desc),
+                    checked = forcePort443,
+                    onCheckedChange = {
+                        HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
+                        forcePort443 = it
+                    }
+                )
+
+                SwitchRow(
                     label = stringResource(R.string.debug_mode),
                     description = stringResource(R.string.debug_mode_desc),
                     checked = debugMode,
@@ -337,6 +385,29 @@ fun ClientSetupScreen(
                         debugMode = it
                     }
                 )
+
+                SwitchRow(
+                    label = stringResource(R.string.magic_switch),
+                    description = stringResource(R.string.magic_switch_desc),
+                    checked = magicSwitch,
+                    onCheckedChange = {
+                        HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
+                        magicSwitch = it
+                    }
+                )
+
+                if (magicSwitch) {
+                    OutlinedTextField(
+                        value = magicTurn.redact(privacyMode),
+                        onValueChange = { if (!privacyMode) magicTurn = it },
+                        label = { Text(stringResource(R.string.magic_switch_address_label)) },
+                        placeholder = { Text(stringResource(R.string.magic_switch_address_placeholder)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        readOnly = privacyMode,
+                        supportingText = { Text(stringResource(R.string.magic_switch_address_support)) }
+                    )
+                }
 
                 HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
 
@@ -360,6 +431,18 @@ fun ClientSetupScreen(
                 val controlsEnabled = if (syncOn) isSshConnected else true
                 val lockedHint = if (syncOn)
                     stringResource(R.string.locked_disconnect_hint) else null
+
+                SwitchRow(
+                    label = stringResource(R.string.client_kcp_fec),
+                    description = lockedHint?.takeIf { !isSshConnected }
+                        ?: stringResource(R.string.client_kcp_fec_desc),
+                    checked = serverOpts.kcpFec,
+                    enabled = controlsEnabled,
+                    onCheckedChange = {
+                        HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
+                        viewModel.setServerKcpFec(it)
+                    }
+                )
 
                 SwitchRow(
                     label = stringResource(R.string.vless_mode),
@@ -398,13 +481,24 @@ fun ClientSetupScreen(
                 )
 
                 if (effectiveWrap) {
+                    val wrapKeyRegex = remember { Regex("^[0-9a-fA-F]{64}$") }
+                    // Локальный черновик: правки в TextField не дёргают saveServerOpts/restart
+                    // на каждом keystroke. Применение — отдельной кнопкой ниже, только когда
+                    // ключ валидный (64 hex). Серверный ключ из serverOpts — источник истины:
+                    // при внешнем обновлении (regen/probe) черновик пересинхронизируется.
+                    var wrapKeyDraft by rememberSaveable(serverOpts.wrapKey) {
+                        mutableStateOf(serverOpts.wrapKey)
+                    }
+                    val draftValid = wrapKeyDraft.matches(wrapKeyRegex)
+                    val draftDirty = wrapKeyDraft != serverOpts.wrapKey
                     OutlinedTextField(
-                        value = serverOpts.wrapKey.redact(privacyMode),
-                        onValueChange = { /* read-only */ },
+                        value = if (privacyMode) serverOpts.wrapKey.redact(true) else wrapKeyDraft,
+                        onValueChange = { if (!privacyMode) wrapKeyDraft = it },
                         label = { Text(stringResource(R.string.server_wrap_key_label)) },
                         modifier = Modifier.fillMaxWidth(),
-                        readOnly = true,
+                        readOnly = privacyMode,
                         singleLine = true,
+                        isError = wrapKeyDraft.isNotBlank() && !draftValid,
                         trailingIcon = {
                             if (serverOpts.wrapKey.isNotBlank() && !privacyMode) {
                                 IconButton(onClick = {
@@ -422,14 +516,29 @@ fun ClientSetupScreen(
                             }
                         },
                         supportingText = {
-                            if (serverOpts.wrapKey.isBlank()) {
-                                Text(
+                            when {
+                                wrapKeyDraft.isBlank() -> Text(
                                     stringResource(R.string.wrap_key_empty_hint),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                !draftValid -> Text(
+                                    stringResource(R.string.wrap_key_invalid_hint),
                                     color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }
                     )
+                    if (!privacyMode && draftDirty && draftValid) {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                                viewModel.setWrapKey(wrapKeyDraft)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.wrap_key_apply))
+                        }
+                    }
                     if (isSshConnected) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             androidx.compose.material3.TextButton(

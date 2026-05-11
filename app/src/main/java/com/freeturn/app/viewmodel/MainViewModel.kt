@@ -333,8 +333,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 listen = l, connect = c,
                 vlessMode = vless,
                 vlessBond = opts.vlessBond,
-                wrapKey = wrapKey
+                wrapKey = wrapKey,
+                kcpFec = opts.kcpFec
             )
+        }
+    }
+
+    fun setServerKcpFec(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = prefs.serverOptsFlow.first()
+            if (current.kcpFec == enabled) return@launch
+            prefs.saveServerOpts(current.copy(kcpFec = enabled))
+            if (clientConfig.value.syncServerSwitches) restartServerIfRunning()
+            restartProxyIfRunning()
         }
     }
 
@@ -384,6 +395,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Прямое редактирование wrap-key пользователем. Принимает любую строку
+     * (валидация формата — на стороне ProxyService/скрипта); если ключ
+     * меняется в sync-режиме, перезапускаем сервер.
+     */
+    fun setWrapKey(key: String) {
+        viewModelScope.launch {
+            val current = prefs.serverOptsFlow.first()
+            val trimmed = key.trim()
+            if (current.wrapKey == trimmed) return@launch
+            prefs.saveServerOpts(current.copy(wrapKey = trimmed))
+            if (clientConfig.value.syncServerSwitches) restartServerIfRunning()
+            restartProxyIfRunning()
+        }
+    }
+
     fun regenerateWrapKey() {
         viewModelScope.launch {
             if (_isRegeneratingWrapKey.value) return@launch
@@ -415,7 +442,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             listen = l, connect = c,
             vlessMode = vless,
             vlessBond = opts.vlessBond,
-            wrapKey = if (opts.wrapEnabled) opts.wrapKey else ""
+            wrapKey = if (opts.wrapEnabled) opts.wrapKey else "",
+            kcpFec = opts.kcpFec
         )
     }
 
