@@ -108,6 +108,9 @@
     <string name="listen_port">Порт прослушивания</string>
     <string name="listen_port_placeholder">56000</string>
     <string name="listen_port_desc">Порт, на котором сервер принимает подключения от клиентов</string>
+    <string name="listen_ip">IP прослушивания</string>
+    <string name="listen_ip_placeholder">0.0.0.0</string>
+    <string name="listen_ip_desc">IP-адрес, к которому биндится сервер. 0.0.0.0 — все интерфейсы. Укажите конкретный WAN IP, если на хосте несколько адресов.</string>
     <string name="turn_client_address">Адрес TURN‑клиента</string>
     <string name="turn_client_placeholder">127.0.0.1:40537</string>
     <string name="turn_client_desc">Локальный WireGuard/Hysteria-клиент на стороне сервера</string>

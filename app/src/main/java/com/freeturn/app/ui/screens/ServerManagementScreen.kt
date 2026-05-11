@@ -87,12 +87,16 @@ fun ServerManagementScreen(
     val clientCfg by viewModel.clientConfig.collectAsStateWithLifecycle()
     val serverLogs by viewModel.serverLogs.collectAsStateWithLifecycle()
 
+    var proxyListenIp by rememberSaveable(savedListen) {
+        mutableStateOf(savedListen.substringBeforeLast(":", "0.0.0.0").ifBlank { "0.0.0.0" })
+    }
     var proxyListenPort by rememberSaveable(savedListen) { mutableStateOf(savedListen.substringAfterLast(":", "56000")) }
     var proxyConnect by rememberSaveable(savedConnect) { mutableStateOf(savedConnect) }
 
-    LaunchedEffect(proxyListenPort, proxyConnect) {
+    LaunchedEffect(proxyListenIp, proxyListenPort, proxyConnect) {
         kotlinx.coroutines.delay(400)
-        val listen = "0.0.0.0:$proxyListenPort"
+        val ip = proxyListenIp.ifBlank { "0.0.0.0" }
+        val listen = "$ip:$proxyListenPort"
         if (listen != savedListen || proxyConnect != savedConnect) {
             viewModel.saveProxyServerConfig(listen, proxyConnect)
         }
@@ -221,6 +225,16 @@ fun ServerManagementScreen(
                 Text(stringResource(R.string.server_config), style = MaterialTheme.typography.titleMedium)
 
                 OutlinedTextField(
+                    value = proxyListenIp,
+                    onValueChange = { v -> proxyListenIp = v.filter { c -> c.isDigit() || c == '.' || c == ':' } },
+                    label = { Text(stringResource(R.string.listen_ip)) },
+                    placeholder = { Text(stringResource(R.string.listen_ip_placeholder)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    supportingText = { Text(stringResource(R.string.listen_ip_desc)) }
+                )
+
+                OutlinedTextField(
                     value = proxyListenPort,
                     onValueChange = { proxyListenPort = it.filter { c -> c.isDigit() } },
                     label = { Text(stringResource(R.string.listen_port)) },
@@ -257,7 +271,7 @@ fun ServerManagementScreen(
                 FilledTonalButton(
                     onClick = {
                         HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                        viewModel.saveProxyServerConfig("0.0.0.0:$proxyListenPort", proxyConnect)
+                        viewModel.saveProxyServerConfig("${proxyListenIp.ifBlank { "0.0.0.0" }}:$proxyListenPort", proxyConnect)
                         viewModel.installServer()
                     },
                     enabled = isConnected && !isWorking,
@@ -272,7 +286,7 @@ fun ServerManagementScreen(
                 Button(
                     onClick = {
                         HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                        viewModel.saveProxyServerConfig("0.0.0.0:$proxyListenPort", proxyConnect)
+                        viewModel.saveProxyServerConfig("${proxyListenIp.ifBlank { "0.0.0.0" }}:$proxyListenPort", proxyConnect)
                         viewModel.startServer()
                     },
                     enabled = (isConnected && !isWorking
