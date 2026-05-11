@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import com.freeturn.app.ui.theme.extendedColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -283,15 +284,27 @@ private fun EasterEggScreen() {
     var quoteIdx by remember { mutableStateOf(0) }
     var frameTick by remember { mutableStateOf(0L) }
 
-    val palette = remember {
+    // MD3 tokens — палитра адаптируется под dynamic color/dark theme.
+    // info → edges/nodes (нейтральный «сетевой» канал), warning → пакеты,
+    // error → блокировки. labelBackground затемнённый inverseSurface для
+    // читаемости поверх анимированного фона.
+    val ext = MaterialTheme.extendedColorScheme
+    val info = ext.info
+    val infoContainer = ext.infoContainer
+    val warning = ext.warning
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val labelBg = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.8f)
+    val errorColor = MaterialTheme.colorScheme.error
+    val palette = remember(info, infoContainer, warning, onSurface, onSurfaceVariant, labelBg) {
         Palette(
-            edge = Color(0xFF7DD3FC),
-            nodeCore = Color(0xFF38BDF8),
-            nodeGlow = Color(0xFF0EA5E9),
-            packet = Color(0xFFFACC15),
-            text = Color(0xFFF8FAFC),
-            textDim = Color(0xFFCBD5E1),
-            labelBackground = Color(0xCC05060A),
+            edge = info,
+            nodeCore = info,
+            nodeGlow = infoContainer,
+            packet = warning,
+            text = onSurface,
+            textDim = onSurfaceVariant,
+            labelBackground = labelBg,
         )
     }
 
@@ -362,7 +375,7 @@ private fun EasterEggScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF05060A))
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         Canvas(
             modifier = Modifier
@@ -393,6 +406,7 @@ private fun EasterEggScreen() {
                 packets = packets,
                 adj = adjacency,
                 palette = palette,
+                blockedColor = errorColor,
                 frameTick = frameTick,
             )
         }
@@ -924,10 +938,10 @@ private fun DrawScope.drawNetwork(
     packets: List<Packet>,
     adj: List<List<Int>>,
     palette: Palette,
+    blockedColor: Color,
     @Suppress("UNUSED_PARAMETER") frameTick: Long,
 ) {
     val now = System.currentTimeMillis()
-    val blockedColor = Color(0xFFE53935)
 
     fun blockProgress(node: Node): Float {
         val startedAt = node.blockStartAt
