@@ -174,7 +174,8 @@ class SshRepository(
         connect: String,
         vlessMode: Boolean = false,
         vlessBond: Boolean = false,
-        wrapKey: String = ""
+        wrapKey: String = "",
+        kcpFec: Boolean = false
     ): Boolean {
         val cfg = activeSshConfig ?: return false
         if (cfg.ip.isEmpty()) return false
@@ -188,7 +189,8 @@ class SshRepository(
                     connect = connect,
                     vless = vlessMode,
                     vlessBond = vlessBond && vlessMode,
-                    wrapKey = wrapKey
+                    wrapKey = wrapKey,
+                    kcpFec = kcpFec
                 )
             )
         )

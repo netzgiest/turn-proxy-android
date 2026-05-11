@@ -17,10 +17,11 @@ LOGFILE="$PREFIX/server.log"
 VERFILE="$PREFIX/version"
 RUNTIMEFILE="$PREFIX/runtime"
 ARGSFILE="$PREFIX/run.args"
+ENVFILE="$PREFIX/run.env"
 LAUNCHER="$PREFIX/launch.sh"
 UNIT_PATH="/etc/systemd/system/vk-turn-proxy.service"
 UNIT_NAME="vk-turn-proxy.service"
-BASE_URL="https://github.com/Moroka8/vk-turn-proxy/releases/latest/download"
+BASE_URL="https://github.com/samosvalishe/vk-turn-proxy/releases/latest/download"
 
 log()  { echo "LOG: $*"; }
 emit() { echo "$1=$2"; }
@@ -28,12 +29,32 @@ die()  { echo "ERR=$*"; echo "RESULT=err"; trap - EXIT; exit 1; }
 
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "ERR=script exit $rc"; echo "RESULT=err"; fi' EXIT
 
+_mips_is_le() {
+    # 1=LE, 0=BE. od на little-endian машине '\1\0' читает как 0x0001.
+    local hex
+    hex=$(printf '\1\0' | od -An -tx2 -N2 2>/dev/null | tr -d ' \n')
+    [ "$hex" = "0001" ]
+}
+
 detect_arch() {
     local m
     m=$(uname -m)
     case "$m" in
         x86_64|amd64) echo "server-linux-amd64" ;;
         aarch64|arm64) echo "server-linux-arm64" ;;
+        armv7l|armv6l|armv5*|arm) echo "server-linux-arm" ;;
+        i386|i486|i586|i686) echo "server-linux-386" ;;
+        riscv64) echo "server-linux-riscv64" ;;
+        mips64|mips64le)
+            if _mips_is_le; then echo "server-linux-mips64le"
+            else die "unsupported arch: mips64 BE (no asset)"
+            fi
+            ;;
+        mips|mipsel|mipsle)
+            if _mips_is_le; then echo "server-linux-mipsle"
+            else echo "server-linux-mips"
+            fi
+            ;;
         *) die "unsupported arch: $m" ;;
     esac
 }
@@ -169,10 +190,28 @@ _install_systemd_unit() {
 # Авто-сгенерирован vk-turn-control.sh — не редактировать вручную.
 set -e
 PREFIX=/opt/vk-turn
+mips_is_le() {
+    local hex
+    hex=$(printf '\1\0' | od -An -tx2 -N2 2>/dev/null | tr -d ' \n')
+    [ "$hex" = "0001" ]
+}
 m=$(uname -m)
 case "$m" in
     x86_64|amd64) arch=server-linux-amd64 ;;
     aarch64|arm64) arch=server-linux-arm64 ;;
+    armv7l|armv6l|armv5*|arm) arch=server-linux-arm ;;
+    i386|i486|i586|i686) arch=server-linux-386 ;;
+    riscv64) arch=server-linux-riscv64 ;;
+    mips64|mips64le)
+        if mips_is_le; then arch=server-linux-mips64le
+        else echo "unsupported arch: mips64 BE" >&2; exit 1
+        fi
+        ;;
+    mips|mipsel|mipsle)
+        if mips_is_le; then arch=server-linux-mipsle
+        else arch=server-linux-mips
+        fi
+        ;;
     *) echo "unsupported arch: $m" >&2; exit 1 ;;
 esac
 [ -f "$PREFIX/run.args" ] || { echo "run.args missing" >&2; exit 1; }
@@ -195,6 +234,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+EnvironmentFile=-$ENVFILE
 ExecStart=$LAUNCHER
 Restart=on-failure
 RestartSec=2
@@ -318,6 +358,7 @@ ARG_CONNECT=""
 ARG_VLESS=""
 ARG_VLESS_BOND=""
 ARG_WRAP_KEY=""
+ARG_KCP_FEC=""
 ARG_TAIL=80
 
 parse_args() {
@@ -336,6 +377,10 @@ parse_args() {
             --wrap-key=*)
                 ARG_WRAP_KEY="${1#*=}"
                 [[ "$ARG_WRAP_KEY" =~ ^[0-9a-fA-F]{64}$ ]] || die "bad --wrap-key (need 64 hex)"
+                ;;
+            --kcp-fec=*)
+                ARG_KCP_FEC="${1#*=}"
+                [[ "$ARG_KCP_FEC" =~ ^[0-9]+:[0-9]+$ ]] || die "bad --kcp-fec (need data:parity)"
                 ;;
             --tail=*)
                 ARG_TAIL="${1#*=}"
@@ -369,12 +414,24 @@ _write_args_file() {
     chmod 600 "$ARGSFILE"
 }
 
+# Записать env-переменные в run.env (KEY=VALUE, mode 600). Используется
+# и systemd (EnvironmentFile), и nohup (source перед exec).
+_write_env_file() {
+    local tmp="$ENVFILE.tmp"
+    : > "$tmp"
+    chmod 600 "$tmp"
+    [ -n "$ARG_KCP_FEC" ] && echo "VK_TURN_KCP_FEC=$ARG_KCP_FEC" >> "$tmp"
+    mv -f "$tmp" "$ENVFILE"
+    chmod 600 "$ENVFILE"
+}
+
 cmd_start_systemd() {
     local bin
     bin=$(binpath)
     [ -x "$bin" ] || die "server binary not installed; run install first"
 
     _write_args_file
+    _write_env_file
 
     if ! systemctl restart "$UNIT_NAME"; then
         die "systemctl restart failed"
@@ -410,6 +467,13 @@ cmd_start_nohup() {
     fi
 
     cd "$PREFIX"
+    _write_env_file
+    if [ -f "$ENVFILE" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        . "$ENVFILE"
+        set +a
+    fi
     local args=(-listen "$ARG_LISTEN" -connect "$ARG_CONNECT")
     [ -n "$ARG_VLESS" ]      && args+=(-vless)
     [ -n "$ARG_VLESS_BOND" ] && args+=(-vless-bond)
@@ -462,11 +526,13 @@ _stop_nohup() {
     fi
     pkill -9 -f "^$PREFIX/server-linux-" 2>/dev/null || true
     rm -f "$WRAPFILE"
+    rm -f "$ENVFILE"
 }
 
 _stop_systemd() {
     # Не disable — autostart должен сохраняться между ручными stop/start.
     systemctl stop "$UNIT_NAME" 2>/dev/null || true
+    rm -f "$ENVFILE"
 }
 
 cmd_stop() {
