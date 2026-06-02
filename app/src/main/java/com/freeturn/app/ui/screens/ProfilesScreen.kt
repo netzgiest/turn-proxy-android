@@ -60,6 +60,7 @@ import com.freeturn.app.R
 import com.freeturn.app.data.Profile
 import com.freeturn.app.data.ProfilesSnapshot
 import com.freeturn.app.data.Provider
+import com.freeturn.app.data.TunnelTransport
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.ui.components.ProfileNameDialog
 import com.freeturn.app.ui.util.hapticClickable
@@ -304,6 +305,10 @@ private fun ProfileRow(
                 else MaterialTheme.colorScheme.onSurface
             )
             val sub = listOfNotNull(
+                when (profile.client.tunnelTransport) {
+                    TunnelTransport.SING_BOX -> "sing-box"
+                    else -> "WireGuard"
+                },
                 profile.client.serverAddress.takeIf { it.isNotBlank() }?.redact(privacyMode),
                 profile.ssh.ip.takeIf { it.isNotBlank() }?.let { "SSH ${it.redact(privacyMode)}" }
             ).joinToString(" · ").ifBlank { "—" }

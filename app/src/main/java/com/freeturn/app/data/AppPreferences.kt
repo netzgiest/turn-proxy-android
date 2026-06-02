@@ -57,9 +57,10 @@ object ObfProfile {
  */
 object TunnelTransport {
     const val WIREGUARD = "wireguard"
+    const val SING_BOX = "sing_box"
     /** Имя WG-туннеля по умолчанию (GoBackend). */
     const val DEFAULT_TUNNEL_NAME = "freeturn-wg"
-    val ALL = listOf(WIREGUARD)
+    val ALL = listOf(WIREGUARD, SING_BOX)
 }
 
 /** Режим split-tunneling для WireGuard-интерфейса. */
@@ -111,6 +112,8 @@ data class ClientConfig(
     val tunnelTransport: String = TunnelTransport.WIREGUARD,
     /** Конфиг WireGuard (.conf). Пусто = WG-туннель не поднимается. */
     val wireGuardConfig: String = "",
+    /** Конфиг sing-box (JSON). Пусто = sing-box не поднимается. */
+    val singBoxConfig: String = "",
     /** Имя WG-туннеля для GoBackend. */
     val wireGuardTunnelName: String = TunnelTransport.DEFAULT_TUNNEL_NAME,
     /** Режим split-tunneling: all | include | exclude. */
@@ -123,6 +126,9 @@ data class ClientConfig(
     /** WG реально активен только если выбран WG-транспорт и задан непустой конфиг. */
     val wireGuardActive: Boolean
         get() = tunnelTransport == TunnelTransport.WIREGUARD && wireGuardConfig.isNotBlank()
+
+    val singBoxActive: Boolean
+        get() = tunnelTransport == TunnelTransport.SING_BOX && singBoxConfig.isNotBlank()
 }
 
 class AppPreferences(context: Context) {
@@ -155,6 +161,7 @@ class AppPreferences(context: Context) {
         val CLIENT_MAGIC_TURN = stringPreferencesKey("client_magic_turn")
         val CLIENT_TUNNEL_TRANSPORT = stringPreferencesKey("client_tunnel_transport")
         val CLIENT_WG_CONFIG = stringPreferencesKey("client_wg_config")
+        val CLIENT_SING_BOX_CONFIG = stringPreferencesKey("client_sing_box_config")
         val CLIENT_WG_TUNNEL_NAME = stringPreferencesKey("client_wg_tunnel_name")
         val CLIENT_SPLIT_TUNNEL_MODE = stringPreferencesKey("client_split_tunnel_mode")
         val CLIENT_SPLIT_TUNNEL_APPS = stringPreferencesKey("client_split_tunnel_apps")
@@ -231,6 +238,7 @@ class AppPreferences(context: Context) {
                     if (it in TunnelTransport.ALL) it else TunnelTransport.WIREGUARD
                 },
                 wireGuardConfig = prefs[CLIENT_WG_CONFIG] ?: "",
+                singBoxConfig = prefs[CLIENT_SING_BOX_CONFIG] ?: "",
                 wireGuardTunnelName = (prefs[CLIENT_WG_TUNNEL_NAME] ?: TunnelTransport.DEFAULT_TUNNEL_NAME)
                     .ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME },
                 splitTunnelMode = (prefs[CLIENT_SPLIT_TUNNEL_MODE] ?: SplitTunnelMode.ALL).let {
@@ -361,6 +369,7 @@ class AppPreferences(context: Context) {
                 if (config.tunnelTransport in TunnelTransport.ALL) config.tunnelTransport
                 else TunnelTransport.WIREGUARD
             prefs[CLIENT_WG_CONFIG] = config.wireGuardConfig.trim()
+            prefs[CLIENT_SING_BOX_CONFIG] = config.singBoxConfig.trim()
             prefs[CLIENT_WG_TUNNEL_NAME] =
                 config.wireGuardTunnelName.trim().ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME }
             prefs[CLIENT_SPLIT_TUNNEL_MODE] =

@@ -81,6 +81,7 @@ internal object ProfileJson {
             put("magicTurn", p.client.magicTurn)
             put("tunnelTransport", p.client.tunnelTransport)
             put("wireGuardConfig", p.client.wireGuardConfig)
+            put("singBoxConfig", p.client.singBoxConfig)
             put("wireGuardTunnelName", p.client.wireGuardTunnelName)
             put("splitTunnelMode", p.client.splitTunnelMode)
             put("splitTunnelApps", p.client.splitTunnelApps)
@@ -138,6 +139,7 @@ internal object ProfileJson {
                     if (it in TunnelTransport.ALL) it else TunnelTransport.WIREGUARD
                 },
                 wireGuardConfig = cliO.optString("wireGuardConfig"),
+                singBoxConfig = cliO.optString("singBoxConfig"),
                 wireGuardTunnelName = cliO.optString("wireGuardTunnelName").ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME },
                 splitTunnelMode = cliO.optString("splitTunnelMode", SplitTunnelMode.ALL).let {
                     if (it in SplitTunnelMode.VALUES) it else SplitTunnelMode.ALL

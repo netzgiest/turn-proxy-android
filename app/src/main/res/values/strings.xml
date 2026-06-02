@@ -227,10 +227,20 @@
     <string name="tunnel_transport_title">Туннельное приложение</string>
     <string name="tunnel_transport_desc">Поднимает VPN-туннель поверх локального прокси: трафик устройства заворачивается через TURN-релей. Оставьте конфиг пустым, чтобы не использовать туннель.</string>
     <string name="wireguard_section">WireGuard</string>
+    <string name="transport_wireguard">WireGuard</string>
+    <string name="transport_sing_box">sing-box</string>
     <string name="wireguard_tunnel_name">Имя туннеля</string>
     <string name="wireguard_config_label">Конфигурация WireGuard (.conf)</string>
     <string name="wireguard_config_placeholder">[Interface]\nPrivateKey = …\nAddress = …\n\n[Peer]\nPublicKey = …\nAllowedIPs = 0.0.0.0/0</string>
     <string name="wireguard_config_support">Endpoint подменяется на локальный порт прокси автоматически. Пусто = туннель не поднимается.</string>
+    <string name="sing_box_section">sing-box</string>
+    <string name="sing_box_config_label">Конфигурация sing-box (JSON)</string>
+    <string name="sing_box_config_placeholder">{\n  \"log\": { ... },\n  \"inbounds\": [...],\n  \"outbounds\": [...]\n}</string>
+    <string name="sing_box_config_support">JSON-конфиг sing-box, который будет сохранён в профиль и использован при запуске.</string>
+    <string name="sing_box_import_links">Импортировать ссылки</string>
+    <string name="sing_box_import_title">Импорт профиля sing-box</string>
+    <string name="sing_box_import_placeholder">Вставьте ссылку, base64 subscription или список ссылок в строках</string>
+    <string name="sing_box_import_apply">Импортировать</string>
 
     <!-- Split tunneling -->
     <string name="split_tunnel_title">Раздельное туннелирование</string>

@@ -15,6 +15,7 @@ import com.freeturn.app.data.SshConfig
 import com.freeturn.app.domain.AppUpdater
 import com.freeturn.app.domain.LocalProxyManager
 import com.freeturn.app.domain.ProxyOrchestrator
+import com.freeturn.app.domain.SingBoxLinkImporter
 import com.freeturn.app.domain.SshRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -211,6 +212,53 @@ class SettingsViewModel(
                 val trimmed = value.trim()
                 if (current.splitTunnelApps == trimmed) return@withLock
                 persistClient(current.copy(splitTunnelApps = trimmed))
+            }
+        }
+    }
+
+    fun setTunnelTransport(value: String) {
+        viewModelScope.launch {
+            profileMutex.withLock {
+                val current = prefs.clientConfigFlow.first()
+                if (current.tunnelTransport == value) return@withLock
+                prefs.saveClientConfig(current.copy(tunnelTransport = value))
+            }
+        }
+    }
+
+    fun setWireGuardConfig(value: String) {
+        viewModelScope.launch {
+            profileMutex.withLock {
+                val current = prefs.clientConfigFlow.first()
+                val trimmed = value.trim()
+                if (current.wireGuardConfig == trimmed) return@withLock
+                prefs.saveClientConfig(current.copy(wireGuardConfig = trimmed))
+            }
+        }
+    }
+
+    fun setSingBoxConfig(value: String) {
+        viewModelScope.launch {
+            profileMutex.withLock {
+                val current = prefs.clientConfigFlow.first()
+                val trimmed = value.trim()
+                if (current.singBoxConfig == trimmed) return@withLock
+                prefs.saveClientConfig(current.copy(singBoxConfig = trimmed))
+            }
+        }
+    }
+
+    fun importSingBoxLinks(raw: String) {
+        viewModelScope.launch {
+            val imported = SingBoxLinkImporter.import(raw)
+            profileMutex.withLock {
+                val current = prefs.clientConfigFlow.first()
+                prefs.saveClientConfig(
+                    current.copy(
+                        tunnelTransport = com.freeturn.app.data.TunnelTransport.SING_BOX,
+                        singBoxConfig = imported.configJson
+                    )
+                )
             }
         }
     }

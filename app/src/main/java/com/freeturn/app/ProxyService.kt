@@ -22,7 +22,9 @@ import androidx.core.app.ServiceCompat
 import com.freeturn.app.data.AppPreferences
 import com.freeturn.app.data.DnsMode
 import com.freeturn.app.data.Provider
+import com.freeturn.app.data.TunnelTransport
 import com.freeturn.app.domain.WireGuardTunnelManager
+import com.freeturn.app.domain.SingBoxTunnelManager
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -104,6 +106,7 @@ class ProxyService : Service() {
     private lateinit var prefs: AppPreferences
     private lateinit var serviceScope: CoroutineScope
     private lateinit var wireGuard: WireGuardTunnelManager
+    private lateinit var singBox: SingBoxTunnelManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -112,6 +115,7 @@ class ProxyService : Service() {
         prefs = AppPreferences(applicationContext)
         serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         wireGuard = WireGuardTunnelManager(applicationContext)
+        singBox = SingBoxTunnelManager(applicationContext)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(
@@ -196,6 +200,25 @@ class ProxyService : Service() {
         // и клиенту с тем же ключом, иначе DTLS-handshake не сойдётся. Источник
         // истины — общий serverOpts.
         val srv = prefs.serverOptsFlow.first()
+
+        if (cfg.singBoxActive) {
+            try {
+                ProxyServiceState.addLog("sing-box: запуск отдельного профиля")
+                singBox.startAfterProxyReady(cfg)
+                ProxyServiceState.setStartupResult(StartupResult.Success)
+                ProxyServiceState.setConnectionStats(ConnectionStats(1, 1))
+                ProxyServiceState.markConnectedIfAbsent(SystemClock.elapsedRealtime())
+                updateNotification(getString(R.string.proxy_active))
+                return
+            } catch (e: Exception) {
+                val msg = e.message ?: e.javaClass.simpleName
+                ProxyServiceState.addLog("sing-box: ошибка запуска: $msg")
+                ProxyServiceState.setStartupResult(StartupResult.Failed(msg))
+                ProxyServiceState.setRunning(false)
+                stopSelf()
+                return
+            }
+        }
 
         // Имя ядра версионируется (libfreeturn-<ver>-android-arm64.so) и меняется
         // между релизами — не хардкодим. Ищем в nativeLibraryDir libfreeturn*.so
@@ -836,6 +859,8 @@ class ProxyService : Service() {
         // снимет ОС вместе с процессом.
         val wg = wireGuard
         Thread { runBlocking { wg.stop() } }.start()
+        val sb = singBox
+        Thread { runBlocking { sb.stop() } }.start()
         serviceScope.cancel()
         if (wakeLock?.isHeld == true) wakeLock?.release()
     }
