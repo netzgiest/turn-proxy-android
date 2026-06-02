@@ -221,7 +221,18 @@ class SettingsViewModel(
             profileMutex.withLock {
                 val current = prefs.clientConfigFlow.first()
                 if (current.tunnelTransport == value) return@withLock
-                prefs.saveClientConfig(current.copy(tunnelTransport = value))
+                val next = when (value) {
+                    com.freeturn.app.data.TunnelTransport.SING_BOX -> current.copy(
+                        tunnelTransport = value,
+                        wireGuardConfig = "",
+                        wireGuardTunnelName = com.freeturn.app.data.TunnelTransport.DEFAULT_TUNNEL_NAME
+                    )
+                    else -> current.copy(
+                        tunnelTransport = value,
+                        singBoxConfig = ""
+                    )
+                }
+                prefs.saveClientConfig(next)
             }
         }
     }
@@ -232,7 +243,11 @@ class SettingsViewModel(
                 val current = prefs.clientConfigFlow.first()
                 val trimmed = value.trim()
                 if (current.wireGuardConfig == trimmed) return@withLock
-                prefs.saveClientConfig(current.copy(wireGuardConfig = trimmed))
+                prefs.saveClientConfig(current.copy(
+                    wireGuardConfig = trimmed,
+                    singBoxConfig = if (current.tunnelTransport == com.freeturn.app.data.TunnelTransport.WIREGUARD)
+                        current.singBoxConfig else ""
+                ))
             }
         }
     }
@@ -243,7 +258,11 @@ class SettingsViewModel(
                 val current = prefs.clientConfigFlow.first()
                 val trimmed = value.trim()
                 if (current.singBoxConfig == trimmed) return@withLock
-                prefs.saveClientConfig(current.copy(singBoxConfig = trimmed))
+                prefs.saveClientConfig(current.copy(
+                    singBoxConfig = trimmed,
+                    wireGuardConfig = if (current.tunnelTransport == com.freeturn.app.data.TunnelTransport.SING_BOX)
+                        "" else current.wireGuardConfig
+                ))
             }
         }
     }
@@ -256,6 +275,8 @@ class SettingsViewModel(
                 prefs.saveClientConfig(
                     current.copy(
                         tunnelTransport = com.freeturn.app.data.TunnelTransport.SING_BOX,
+                        wireGuardConfig = "",
+                        wireGuardTunnelName = com.freeturn.app.data.TunnelTransport.DEFAULT_TUNNEL_NAME,
                         singBoxConfig = imported.configJson
                     )
                 )

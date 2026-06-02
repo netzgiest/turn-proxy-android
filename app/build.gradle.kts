@@ -84,6 +84,9 @@ dependencies {
 
 val singBoxSourceDir = layout.projectDirectory.dir("sing-box")
 val singBoxBinary = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libsing-box.so")
+val singBoxAndroidDir = layout.projectDirectory.dir("sing-box-for-android/app")
+val singBoxLibboxMain = layout.projectDirectory.file("sing-box-for-android/app/libs/libbox.aar")
+val singBoxLibboxLegacy = layout.projectDirectory.file("sing-box-for-android/app/libs/libbox-legacy.aar")
 
 tasks.register<Exec>("buildSingBox") {
     group = "build"
@@ -93,6 +96,25 @@ tasks.register<Exec>("buildSingBox") {
     commandLine("go", "build", "-o", singBoxBinary.asFile.absolutePath, ".")
 }
 
+tasks.register<Exec>("buildSingBoxLibbox") {
+    group = "build"
+    description = "Builds libbox.aar for sing-box Android VPN service when source is present."
+    onlyIf { singBoxSourceDir.asFile.exists() && singBoxAndroidDir.asFile.exists() }
+    workingDir = singBoxSourceDir.asFile
+    commandLine("go", "run", "./cmd/internal/build_libbox", "-target", "android")
+}
+
+tasks.register("syncSingBoxAndroidDeps") {
+    group = "build"
+    description = "Verifies sing-box Android artifacts are available for the app build."
+    dependsOn("buildSingBox", "buildSingBoxLibbox")
+    doLast {
+        if (!singBoxLibboxMain.asFile.exists()) {
+            throw GradleException("sing-box libbox.aar was not produced at ${singBoxLibboxMain.asFile}")
+        }
+    }
+}
+
 tasks.named("preBuild") {
-    dependsOn("buildSingBox")
+    dependsOn("syncSingBoxAndroidDeps")
 }

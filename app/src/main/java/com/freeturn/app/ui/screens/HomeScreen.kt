@@ -89,6 +89,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.freeturn.app.data.SplitTunnelMode
+import com.freeturn.app.data.TunnelTransport
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.ui.theme.extendedColorScheme
 import com.freeturn.app.viewmodel.ProxyState
@@ -168,9 +169,9 @@ fun HomeScreen(
             skipHiddenState = true
         )
     )
-    // WireGuard-туннелю нужно согласие пользователя на VPN. После выдачи —
-    // запускаем прокси (а ProxyService уже поднимет WG поверх него).
-    val wireGuardPermissionLauncher = rememberLauncherForActivityResult(
+    // И WireGuard, и sing-box с TUN требуют VPN permission. После выдачи —
+    // запускаем прокси, а сервис выберет нужный backend.
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
         if (VpnService.prepare(context) == null) {
@@ -182,7 +183,7 @@ fun HomeScreen(
         if (clientConfig.wireGuardActive || clientConfig.singBoxActive) {
             val vpnIntent = VpnService.prepare(context)
             if (vpnIntent != null) {
-                wireGuardPermissionLauncher.launch(vpnIntent)
+                vpnPermissionLauncher.launch(vpnIntent)
                 return
             }
         }
