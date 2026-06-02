@@ -4,6 +4,7 @@ import android.content.Context
 import com.freeturn.app.ProxyServiceState
 import com.freeturn.app.data.ClientConfig
 import com.freeturn.app.data.SplitTunnelMode
+import com.freeturn.app.data.TunnelTransport
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
@@ -13,7 +14,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Поднимает WireGuard-туннель (GoBackend) поверх уже работающего локального прокси.
- * Endpoint в конфиге подменяется на localPort прокси, так что трафик устройства
+ * Endpoint в первом [Peer] подменяется на localPort прокси, так что трафик устройства
  * заворачивается в туннель и идёт через TURN-релей. Split-tunnel вставляет в
  * [Interface] Included/ExcludedApplications в зависимости от режима.
  */
@@ -32,7 +33,7 @@ class WireGuardTunnelManager(context: Context) {
             return
         }
 
-        val name = cfg.wireGuardTunnelName.trim().ifBlank { "freeturn-wg" }
+        val name = cfg.wireGuardTunnelName.trim().ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME }
         val endpoint = cfg.localPort.trim()
         val preparedConfig = rawConfig
             .withLocalEndpoint(endpoint)
@@ -75,12 +76,15 @@ private fun String.withLocalEndpoint(endpoint: String): String {
     if (endpoint.isBlank()) return this
     var inPeer = false
     var replaced = false
+    // Подменяем Endpoint только в ПЕРВОМ [Peer]: туннель идёт через один локальный
+    // прокси. Multi-peer конфиги сохраняют остальные пиры нетронутыми.
     val lines = lineSequence().map { line ->
         val section = line.trim()
         if (section.startsWith("[") && section.endsWith("]")) {
             inPeer = section.equals("[Peer]", ignoreCase = true)
         }
-        if (inPeer && section.startsWith("Endpoint", ignoreCase = true) && section.contains("=")) {
+        if (inPeer && !replaced && section.startsWith("Endpoint", ignoreCase = true) &&
+            section.contains("=")) {
             replaced = true
             "Endpoint = $endpoint"
         } else {
