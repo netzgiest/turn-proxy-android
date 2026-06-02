@@ -249,15 +249,12 @@
     <!-- Split tunneling -->
     <string name="split_tunnel_title">Раздельное туннелирование</string>
     <string name="split_tunnel_desc">Какие приложения отправлять в туннель.</string>
-    <string name="split_tunnel_all">Все</string>
-    <string name="split_tunnel_include">Только эти</string>
-    <string name="split_tunnel_exclude">Кроме этих</string>
-    <string name="split_tunnel_pick_apps">Выбрать приложения</string>
-    <string name="split_tunnel_apps_label">Пакеты приложений</string>
-    <string name="split_tunnel_apps_placeholder">com.example.app\ncom.other.app</string>
-    <string name="split_tunnel_apps_support">По одному package-имени в строке (или через запятую).</string>
-    <string name="split_tunnel_pick_title">Выберите приложения</string>
-    <string name="split_tunnel_done">Готово</string>
+    <string name="split_tunnel_mode_label">Режим</string>
+    <string name="split_tunnel_mode_include">Только приложения из списка работают через VPN</string>
+    <string name="split_tunnel_mode_exclude">Приложения из списка не работают через VPN</string>
+    <string name="split_tunnel_search">Поиск приложений</string>
+    <string name="split_tunnel_empty">Приложения не найдены</string>
+    <string name="split_tunnel_locked">Остановите VPN, чтобы изменить раздельное туннелирование</string>
     <string name="split_tunnel_status_off">Раздельное туннелирование выключено</string>
     <string name="split_tunnel_status_on">Раздельное туннелирование включено</string>
 

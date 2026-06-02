@@ -4,34 +4,22 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.freeturn.app.R
+import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /** Установленное приложение — кандидат для split-tunnel. */
 data class AppChoice(val label: String, val packageName: String)
@@ -72,65 +60,43 @@ suspend fun Context.installedInternetApps(): List<AppChoice> = withContext(Dispa
 }
 
 /**
- * Диалог выбора приложений для split-tunnel. Список грузится асинхронно (IO),
- * до готовности — спиннер. Никакой работы PackageManager на main-потоке.
+ * Кэш иконок приложений в памяти (packageName → ImageBitmap). Иконки растеризуются
+ * до фиксированного размера, чтобы ограничить память; loadIcon тяжёлый — только IO.
  */
-@Composable
-fun AppPickerDialog(
-    selected: Set<String>,
-    onDismiss: () -> Unit,
-    onApply: (Set<String>) -> Unit
-) {
-    val context = LocalContext.current
-    var selectedApps by remember(selected) { mutableStateOf(selected) }
-    val apps by produceState<List<AppChoice>?>(initialValue = null) {
-        value = context.installedInternetApps()
-    }
+private object AppIconCache {
+    private const val ICON_PX = 160
+    private val cache = ConcurrentHashMap<String, ImageBitmap>()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.split_tunnel_pick_title)) },
-        text = {
-            val list = apps
-            if (list == null) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-                    items(list) { app ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Checkbox(
-                                checked = app.packageName in selectedApps,
-                                onCheckedChange = { checked ->
-                                    selectedApps = if (checked) selectedApps + app.packageName
-                                    else selectedApps - app.packageName
-                                }
-                            )
-                            Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-                                Text(app.label, style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    app.packageName,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onApply(selectedApps) }) {
-                Text(stringResource(R.string.split_tunnel_done))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+    fun cached(packageName: String): ImageBitmap? = cache[packageName]
+
+    suspend fun load(context: Context, packageName: String): ImageBitmap? =
+        withContext(Dispatchers.IO) {
+            cache[packageName]?.let { return@withContext it }
+            runCatching {
+                context.packageManager.getApplicationIcon(packageName)
+                    .toBitmap(ICON_PX, ICON_PX)
+                    .asImageBitmap()
+                    .also { cache[packageName] = it }
+            }.getOrNull()
         }
-    )
+}
+
+/** Иконка приложения. Грузится из кэша/IO; до готовности — пустое место того же размера. */
+@Composable
+fun AppIcon(packageName: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val icon by produceState(initialValue = AppIconCache.cached(packageName), packageName) {
+        if (value == null) value = AppIconCache.load(context, packageName)
+    }
+    val bitmap = icon
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = null,
+            modifier = modifier.size(40.dp),
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        Spacer(modifier.size(40.dp))
+    }
 }

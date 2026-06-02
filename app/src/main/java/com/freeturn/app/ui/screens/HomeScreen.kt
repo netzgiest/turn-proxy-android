@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -401,14 +402,16 @@ fun HomeScreen(
         ModalBottomSheet(
             onDismissRequest = { showSplitSheet.value = false },
             sheetState = splitSheetState,
-            containerColor = sheetColor
+            containerColor = sheetColor,
+            // Не поднимаем контент над клавиатурой — иначе высокий лист «вырастает»
+            // на весь экран при фокусе поиска. Свои инсеты лист держит сам.
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
         ) {
             SplitTunnelSheetContent(
                 settingsViewModel = settingsViewModel,
                 mode = clientConfig.splitTunnelMode,
                 apps = clientConfig.splitTunnelApps,
-                privacyMode = privacyMode,
-                containerColor = sheetColor
+                locked = proxyState !is ProxyState.Idle && proxyState !is ProxyState.Error
             )
         }
     }
