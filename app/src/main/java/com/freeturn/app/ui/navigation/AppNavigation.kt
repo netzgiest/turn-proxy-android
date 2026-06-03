@@ -232,12 +232,8 @@ private fun AppNavHost(
             SshSetupScreen(
                 serverViewModel = serverViewModel,
                 settingsViewModel = settingsViewModel,
-                onConnected = {
-                    navController.navigate(Routes.SERVER_MANAGEMENT) {
-                        popUpTo(Routes.SSH_SETUP) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                },
+                // Форма открыта поверх экрана сервера — после успеха возвращаемся на него.
+                onConnected = { navController.popBackStack() },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -246,6 +242,7 @@ private fun AppNavHost(
             ServerManagementScreen(
                 serverViewModel = serverViewModel,
                 settingsViewModel = settingsViewModel,
+                onEditConnection = { navController.navigate(Routes.SSH_SETUP) },
                 onContinue = {
                     navController.navigate(Routes.CLIENT_SETUP) {
                         // Убираем SERVER_MANAGEMENT из back stack,
@@ -268,9 +265,7 @@ private fun AppNavHost(
         composable(Routes.HOME) {
             HomeScreen(
                 settingsViewModel = settingsViewModel,
-                proxyViewModel = proxyViewModel,
-                serverViewModel = serverViewModel,
-                onNavigateToSshSetup = { navController.navigate(Routes.SSH_SETUP) }
+                proxyViewModel = proxyViewModel
             )
         }
 

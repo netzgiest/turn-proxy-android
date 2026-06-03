@@ -10,7 +10,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -94,11 +92,9 @@ import com.freeturn.app.data.SplitTunnelMode
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.ui.theme.extendedColorScheme
 import com.freeturn.app.viewmodel.ProxyState
-import com.freeturn.app.viewmodel.SshConnectionState
 import com.freeturn.app.viewmodel.UpdateState
 import com.freeturn.app.viewmodel.SettingsViewModel
 import com.freeturn.app.viewmodel.ProxyViewModel
-import com.freeturn.app.viewmodel.ServerViewModel
 
 import androidx.core.net.toUri
 
@@ -106,18 +102,13 @@ import androidx.core.net.toUri
 @Composable
 fun HomeScreen(
     settingsViewModel: SettingsViewModel,
-    proxyViewModel: ProxyViewModel,
-    serverViewModel: ServerViewModel,
-    onNavigateToSshSetup: () -> Unit
+    proxyViewModel: ProxyViewModel
 ) {
     val context = LocalContext.current
     val proxyState by proxyViewModel.proxyState.collectAsStateWithLifecycle()
     val connectedSince by proxyViewModel.connectedSince.collectAsStateWithLifecycle()
     val uptimeText = rememberProxyUptime(connectedSince)
-    val sshState by serverViewModel.sshState.collectAsStateWithLifecycle()
-    val sshConfig by serverViewModel.sshConfig.collectAsStateWithLifecycle()
     val clientConfig by settingsViewModel.clientConfig.collectAsStateWithLifecycle()
-    val isConfigured = sshConfig.ip.isNotBlank()
 
     // Запрос разрешений при первом открытии главного экрана
     val batteryOptLauncher = rememberLauncherForActivityResult(
@@ -219,12 +210,6 @@ fun HomeScreen(
                 actions = {
                     IconButton(onClick = {
                         HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                        onNavigateToSshSetup()
-                    }) {
-                        Icon(painterResource(R.drawable.host_24px), contentDescription = stringResource(R.string.connection))
-                    }
-                    IconButton(onClick = {
-                        HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
                         showBottomSheet.value = true
                     }) {
                         Icon(painterResource(R.drawable.info_24px), contentDescription = stringResource(R.string.info_desc))
@@ -295,51 +280,6 @@ fun HomeScreen(
                 },
                 textAlign = TextAlign.Center
             )
-
-            if (isConfigured) {
-                Spacer(Modifier.height(32.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(
-                                if (sshState is SshConnectionState.Connected)
-                                    MaterialTheme.extendedColorScheme.info
-                                else MaterialTheme.colorScheme.outline,
-                                CircleShape
-                            )
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        when (sshState) {
-                            is SshConnectionState.Connected -> "SSH: ${(sshState as SshConnectionState.Connected).ip.redact(privacyMode)}"
-                            is SshConnectionState.Connecting -> stringResource(R.string.ssh_connecting)
-                            is SshConnectionState.Error -> stringResource(R.string.ssh_error)
-                            else -> stringResource(R.string.ssh_disconnected)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (sshState !is SshConnectionState.Connected) {
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(
-                            onClick = {
-                                HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                                serverViewModel.reconnectSsh()
-                            },
-                            enabled = sshState !is SshConnectionState.Connecting
-                        ) {
-                            Text(stringResource(R.string.reconnect), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
 
             Spacer(Modifier.height(32.dp))
         }

@@ -2,6 +2,7 @@
 
 package com.freeturn.app.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -39,6 +40,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -61,7 +63,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -78,8 +83,14 @@ import com.freeturn.app.viewmodel.SettingsViewModel
 fun ServerManagementScreen(
     serverViewModel: ServerViewModel,
     settingsViewModel: SettingsViewModel,
-    onContinue: () -> Unit
+    onContinue: () -> Unit,
+    // null — поток онбординга (SERVER_MANAGEMENT_OB): сюда приходят уже сопряжёнными,
+    // SSH-логика не активна, экран рендерится как раньше. Не-null — основная вкладка:
+    // включает авто-сопряжение при открытии, кнопку смены сервера и состояния
+    // «не сопряжено / подключаюсь / ошибка».
+    onEditConnection: (() -> Unit)? = null
 ) {
+    val mainFlow = onEditConnection != null
     val sshState by serverViewModel.sshState.collectAsStateWithLifecycle()
     val serverState by serverViewModel.serverState.collectAsStateWithLifecycle()
     val sshConfig by serverViewModel.sshConfig.collectAsStateWithLifecycle()
@@ -106,9 +117,32 @@ fun ServerManagementScreen(
         }
     }
 
+    // Авто-сопряжение при открытии основной вкладки: есть сохранённый конфиг, но
+    // соединение не установлено → пробуем переподключиться. Триггер только из
+    // Disconnected (после неудачи состояние Error — без бесконечного цикла). Ключ по
+    // ip корректно отрабатывает асинхронную загрузку конфига из DataStore.
+    LaunchedEffect(sshConfig.ip, mainFlow) {
+        if (mainFlow && sshConfig.ip.isNotBlank() && sshState is SshConnectionState.Disconnected) {
+            serverViewModel.reconnectSsh()
+        }
+    }
+
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val isConnected = sshState is SshConnectionState.Connected
+    // Дебаунс карточки сопряжения: при открытии config грузится из DataStore async,
+    // а sshState стартует Disconnected — без задержки карточка мигает на доли секунды
+    // до прихода Connected. Ошибку показываем сразу (уже устаканившееся состояние).
+    var pairingPromptVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            pairingPromptVisible = false
+        } else {
+            delay(400)
+            pairingPromptVisible = true
+        }
+    }
+    val showPairing = sshState is SshConnectionState.Error || pairingPromptVisible
     val isWorking = serverState is ServerState.Working || serverState is ServerState.Checking
     val serverKnown = serverState as? ServerState.Known
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -121,6 +155,18 @@ fun ServerManagementScreen(
                 scrollBehavior = scrollBehavior,
                 actions = {
                     SshStatusBadge(sshState = sshState, ip = sshConfig.ip.redact(privacyMode))
+                    // Вход в форму сопряжения / смены сервера (перенесён с главного экрана).
+                    if (onEditConnection != null) {
+                        IconButton(onClick = {
+                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                            onEditConnection()
+                        }) {
+                            Icon(
+                                painterResource(R.drawable.host_24px),
+                                contentDescription = stringResource(R.string.connection)
+                            )
+                        }
+                    }
                 }
             )
         },
@@ -143,6 +189,24 @@ fun ServerManagementScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Spacer(Modifier.height(4.dp))
+
+                // Основная вкладка без активного сопряжения → приглашение/прогресс/ошибка
+                // вместо бесполезных задизейбленных контролов. В онбординге (mainFlow=false)
+                // сюда приходят уже Connected, поэтому ветка management как раньше.
+                if (mainFlow && !isConnected) {
+                    // showPairing дебаунсит первичный показ — пустой экран до 400мс
+                    // вместо мигающей карточки при загрузке config / авто-сопряжении.
+                    if (showPairing) {
+                        SshPairingPrompt(
+                            state = sshState,
+                            configBlank = sshConfig.ip.isBlank(),
+                            onConnect = { onEditConnection?.invoke() },
+                            onRetry = { serverViewModel.reconnectSsh() }
+                        )
+                        Spacer(Modifier.height(24.dp))
+                    }
+                    return@Column
+                }
 
                 AnimatedVisibility(
                     visible = !clientCfg.syncServerSwitches,
@@ -456,6 +520,109 @@ fun ServerManagementScreen(
                 }
 
                 Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Состояние сопряжения для основной вкладки сервера, когда соединение ещё не
+ * установлено: приглашение подключиться (нет конфига), прогресс (идёт авто-/ручное
+ * сопряжение) или ошибка с повтором.
+ */
+@Composable
+private fun SshPairingPrompt(
+    state: SshConnectionState,
+    configBlank: Boolean,
+    onConnect: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val context = LocalContext.current
+    // Disconnected с сохранённым конфигом — транзитное: авто-сопряжение вот-вот
+    // сработает, показываем прогресс, а не кнопку «Подключиться» (без мигания).
+    val connecting = state is SshConnectionState.Connecting ||
+        (state is SshConnectionState.Disconnected && !configBlank)
+    // Ключ для AnimatedContent: морфим только при смене фазы, а не при каждом
+    // обновлении state.message внутри Error.
+    val phase = when {
+        state is SshConnectionState.Error -> "error"
+        connecting -> "connecting"
+        else -> "prompt"
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        AnimatedContent(
+            targetState = phase,
+            label = "ssh-pairing",
+            modifier = Modifier.fillMaxWidth()
+        ) { target ->
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                when (target) {
+                    "error" -> {
+                        val message = (state as? SshConnectionState.Error)?.message.orEmpty()
+                        // Иконка + текст — единый узел для TalkBack: озвучивается как ошибка.
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.semantics(mergeDescendants = true) {}
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.error_24px),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                                onRetry()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large
+                        ) { Text(stringResource(R.string.reconnect)) }
+                    }
+
+                    "connecting" -> {
+                        Text(
+                            stringResource(R.string.ssh_connecting),
+                            style = MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center
+                        )
+                        LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+
+                    else -> {
+                        Icon(
+                            painterResource(R.drawable.host_24px),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            stringResource(R.string.server_not_paired_prompt),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Button(
+                            onClick = {
+                                HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                                onConnect()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large
+                        ) { Text(stringResource(R.string.connect_btn)) }
+                    }
+                }
             }
         }
     }

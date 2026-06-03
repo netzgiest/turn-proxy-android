@@ -13,9 +13,8 @@
     <string name="tcp">TCP</string>
     <string name="udp">UDP</string>
     <string name="ssh_connecting">SSH: сопряжение…</string>
-    <string name="ssh_error">SSH: ошибка</string>
-    <string name="ssh_disconnected">SSH: не сопряжено</string>
     <string name="reconnect">Повторить сопряжение</string>
+    <string name="server_not_paired_prompt">Сервер не сопряжён. Подключитесь, чтобы управлять им.</string>
     <string name="proxy_active_stop">Прокси активен - нажмите для остановки</string>
     <string name="proxy_error_restart">Ошибка - нажмите для повторного запуска</string>
     <string name="start_proxy">Запустить прокси</string>
