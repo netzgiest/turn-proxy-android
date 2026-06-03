@@ -109,8 +109,17 @@ tasks.register("syncSingBoxAndroidDeps") {
     description = "Verifies sing-box Android artifacts are available for the app build."
     dependsOn("buildSingBox", "buildSingBoxLibbox")
     doLast {
-        if (!singBoxLibboxMain.asFile.exists()) {
-            throw GradleException("sing-box libbox.aar was not produced at ${singBoxLibboxMain.asFile}")
+        val hasBinary = singBoxBinary.asFile.exists()
+        val hasLibbox = singBoxLibboxMain.asFile.exists() || singBoxLibboxLegacy.asFile.exists()
+        if (!hasBinary && !hasLibbox) {
+            val msg = """
+                No sing-box artifact found.
+                Either:
+                  - Place libsing-box.so in src/main/jniLibs/arm64-v8a/ (pre-built binary)
+                  - Or clone sing-box source to app/sing-box/ and run this task
+                  - Or clone sing-box-for-android source to app/sing-box-for-android/ and run this task
+            """.trimIndent()
+            throw GradleException(msg)
         }
     }
 }

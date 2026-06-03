@@ -114,6 +114,8 @@ data class ClientConfig(
     val wireGuardConfig: String = "",
     /** Конфиг sing-box (JSON). Пусто = sing-box не поднимается. */
     val singBoxConfig: String = "",
+    /** Пользовательские DNS-сервера для sing-box (через запятую). */
+    val singBoxDnsServers: String = "8.8.8.8,1.1.1.1",
     /** Имя WG-туннеля для GoBackend. */
     val wireGuardTunnelName: String = TunnelTransport.DEFAULT_TUNNEL_NAME,
     /** Режим split-tunneling: all | include | exclude. */
@@ -162,6 +164,7 @@ class AppPreferences(context: Context) {
         val CLIENT_TUNNEL_TRANSPORT = stringPreferencesKey("client_tunnel_transport")
         val CLIENT_WG_CONFIG = stringPreferencesKey("client_wg_config")
         val CLIENT_SING_BOX_CONFIG = stringPreferencesKey("client_sing_box_config")
+        val CLIENT_SING_BOX_DNS_SERVERS = stringPreferencesKey("client_sing_box_dns_servers")
         val CLIENT_WG_TUNNEL_NAME = stringPreferencesKey("client_wg_tunnel_name")
         val CLIENT_SPLIT_TUNNEL_MODE = stringPreferencesKey("client_split_tunnel_mode")
         val CLIENT_SPLIT_TUNNEL_APPS = stringPreferencesKey("client_split_tunnel_apps")
@@ -239,6 +242,8 @@ class AppPreferences(context: Context) {
                 },
                 wireGuardConfig = prefs[CLIENT_WG_CONFIG] ?: "",
                 singBoxConfig = prefs[CLIENT_SING_BOX_CONFIG] ?: "",
+                singBoxDnsServers = (prefs[CLIENT_SING_BOX_DNS_SERVERS] ?: "8.8.8.8,1.1.1.1")
+                    .let { it.ifBlank { "8.8.8.8,1.1.1.1" } },
                 wireGuardTunnelName = (prefs[CLIENT_WG_TUNNEL_NAME] ?: TunnelTransport.DEFAULT_TUNNEL_NAME)
                     .ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME },
                 splitTunnelMode = (prefs[CLIENT_SPLIT_TUNNEL_MODE] ?: SplitTunnelMode.ALL).let {
@@ -370,6 +375,8 @@ class AppPreferences(context: Context) {
                 else TunnelTransport.WIREGUARD
             prefs[CLIENT_WG_CONFIG] = config.wireGuardConfig.trim()
             prefs[CLIENT_SING_BOX_CONFIG] = config.singBoxConfig.trim()
+            prefs[CLIENT_SING_BOX_DNS_SERVERS] =
+                config.singBoxDnsServers.trim().ifBlank { "8.8.8.8,1.1.1.1" }
             prefs[CLIENT_WG_TUNNEL_NAME] =
                 config.wireGuardTunnelName.trim().ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME }
             prefs[CLIENT_SPLIT_TUNNEL_MODE] =

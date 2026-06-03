@@ -1,9 +1,12 @@
 package com.freeturn.app.domain
 
+import android.system.ErrnoException
 import android.system.Os
+import android.system.OsConstants
 import com.freeturn.app.ProxyServiceState
 import java.io.FileDescriptor
 import java.io.InputStream
+import java.io.OutputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -43,6 +46,40 @@ class TunForwarder(
             start()
         }
         ProxyServiceState.addLog("tun2socks: forwarder started")
+        Thread { testConnectivity() }.apply {
+            name = "socks-test"
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun testConnectivity() {
+        try { Thread.sleep(2000) } catch (_: InterruptedException) {}
+        try {
+            val socket = Socket()
+            socket.connect(InetSocketAddress(socksHost, socksPort), 5000)
+            socket.soTimeout = 5000
+            val out = socket.getOutputStream()
+            val sockIn = socket.getInputStream()
+            out.write(byteArrayOf(0x05, 0x01, 0x00))
+            readFully(sockIn, ByteArray(2))
+            val req = ByteArray(10).apply {
+                this[0] = 0x05; this[1] = 0x01; this[2] = 0x00; this[3] = 0x01
+                val addr = InetAddress.getByName("1.1.1.1").address; addr.copyInto(this, 4)
+                this[8] = 0; this[9] = 80
+            }
+            out.write(req)
+            val resp = ByteArray(10)
+            readFully(sockIn, resp)
+            if (resp[1] == 0x00.toByte()) {
+                ProxyServiceState.addLog("tun: SOCKS5 test to 1.1.1.1:80 OK")
+            } else {
+                ProxyServiceState.addLog("tun: SOCKS5 test FAILED: ${resp[1]}")
+            }
+            socket.close()
+        } catch (e: Exception) {
+            ProxyServiceState.addLog("tun: SOCKS5 test error: ${e.message}")
+        }
     }
 
     fun stop() {
@@ -62,6 +99,15 @@ class TunForwarder(
                 val len = Os.read(tunFd, buf, 0, buf.size)
                 if (len <= 0) continue
                 handlePacket(buf, len)
+            } catch (e: ErrnoException) {
+                if (e.errno == OsConstants.EAGAIN) {
+                    // non-blocking fd, no data right now
+                    try { Thread.sleep(10) } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                    }
+                } else if (running.get()) {
+                    ProxyServiceState.addLog("tun: read error: ${e.message}")
+                }
             } catch (e: Exception) {
                 if (running.get()) {
                     ProxyServiceState.addLog("tun: read error: ${e.message}")
@@ -77,10 +123,18 @@ class TunForwarder(
         val ihl = (verIhl and 0x0F) * 4
         if (ihl < 20 || len < ihl) return
         val protocol = buf[9].toInt() and 0xFF
-        if (protocol != 6) return
-
         val srcIp = readIntBE(buf, 12)
         val dstIp = readIntBE(buf, 16)
+
+        if (protocol == 17) {
+            val udpOff = ihl
+            if (len < udpOff + 8) return
+            val dstPort = readShortBE(buf, udpOff + 2) and 0xFFFF
+            if (dstPort == 53) handleDnsViaSocks(buf, len, ihl, srcIp, dstIp)
+            return
+        }
+        if (protocol != 6) return
+
         val tcpOff = ihl
         if (len < tcpOff + 20) return
         val srcPort = readShortBE(buf, tcpOff) and 0xFFFF
@@ -120,6 +174,7 @@ class TunForwarder(
         try {
             val socket = Socket()
             socket.connect(InetSocketAddress(socksHost, socksPort), 5000)
+            socket.soTimeout = 10000
             val out = socket.getOutputStream()
             val sockIn = socket.getInputStream()
 
@@ -137,9 +192,11 @@ class TunForwarder(
             val resp = ByteArray(10)
             readFully(sockIn, resp)
             if (resp[1] != 0x00.toByte()) {
+                ProxyServiceState.addLog("tun: SOCKS5 CONNECT ${ipStr(dstIp)}:${dstPort} rejected: ${resp[1]}")
                 socket.close()
                 return
             }
+            ProxyServiceState.addLog("tun: SYN ${ipStr(srcIp)}:${srcPort} -> ${ipStr(dstIp)}:${dstPort} via SOCKS5")
 
             val srvInitSeq = (Random.nextLong() and 0x3FFFFFFFL) + 1L
             val synAck = buildIpTcpPacket(
@@ -216,6 +273,72 @@ class TunForwarder(
             runCatching { conn.socket.close() }
             runCatching { conn.readerThread.interrupt() }
         }
+    }
+
+    private fun handleDnsViaSocks(buf: ByteArray, len: Int, ihl: Int, srcIp: Int, dstIp: Int) {
+        val udpOff = ihl
+        val udpLen = readShortBE(buf, udpOff + 4) and 0xFFFF
+        if (udpLen < 8 || len < udpOff + udpLen) return
+        val payloadLen = udpLen - 8
+        val srcPort = readShortBE(buf, udpOff) and 0xFFFF
+        val dstPort = readShortBE(buf, udpOff + 2) and 0xFFFF
+        if (payloadLen <= 0) return
+        val payload = buf.copyOfRange(udpOff + 8, udpOff + udpLen)
+        ProxyServiceState.addLog("dns: fwd ${ipStr(srcIp)}:${srcPort} -> ${ipStr(dstIp)}:${dstPort} via SOCKS5 TCP")
+        var socket: Socket? = null
+        try {
+            socket = Socket()
+            socket.connect(InetSocketAddress(socksHost, socksPort), 5000)
+            socket.soTimeout = 5000
+            socks5Connect(socket, dstIp, dstPort)
+            val out = socket.getOutputStream()
+            val sockIn = socket.getInputStream()
+            writeDnsOverTcp(out, payload)
+            val dnsResp = readDnsOverTcp(sockIn) ?: return
+            ProxyServiceState.addLog("dns: response ${dnsResp.size}B -> ${ipStr(srcIp)}:${srcPort}")
+            val reply = buildIpUdpPacket(dstIp, srcIp, dstPort, srcPort, dnsResp, 0, dnsResp.size)
+            Os.write(tunFd, reply, 0, reply.size)
+        } catch (e: Exception) {
+            ProxyServiceState.addLog("dns: ${e.message}")
+        } finally {
+            runCatching { socket?.close() }
+        }
+    }
+
+    private fun socks5Connect(socket: Socket, dstIp: Int, dstPort: Int) {
+        val out = socket.getOutputStream()
+        val sockIn = socket.getInputStream()
+        out.write(byteArrayOf(0x05, 0x01, 0x00))
+        readFully(sockIn, ByteArray(2))
+        val dstAddr = InetAddress.getByAddress(intToBytesBE(dstIp))
+        val req = ByteArray(10).apply {
+            this[0] = 0x05; this[1] = 0x01; this[2] = 0x00; this[3] = 0x01
+            dstAddr.address.copyInto(this, 4)
+            this[8] = ((dstPort shr 8) and 0xFF).toByte()
+            this[9] = (dstPort and 0xFF).toByte()
+        }
+        out.write(req)
+        val resp = ByteArray(10)
+        readFully(sockIn, resp)
+        if (resp[1] != 0x00.toByte()) throw RuntimeException("SOCKS5 connect rejected: ${resp[1]}")
+    }
+
+    private fun writeDnsOverTcp(out: OutputStream, dnsMsg: ByteArray) {
+        val framed = ByteArray(2 + dnsMsg.size)
+        writeShortBE(framed, 0, dnsMsg.size)
+        dnsMsg.copyInto(framed, 2)
+        out.write(framed)
+        out.flush()
+    }
+
+    private fun readDnsOverTcp(stream: InputStream): ByteArray? {
+        val lenHdr = ByteArray(2)
+        readFully(stream, lenHdr)
+        val respLen = readShortBE(lenHdr, 0)
+        if (respLen <= 0 || respLen > 4096) throw RuntimeException("invalid DNS over TCP length: $respLen")
+        val body = ByteArray(respLen)
+        readFully(stream, body)
+        return body
     }
 
     companion object {
@@ -333,6 +456,47 @@ class TunForwarder(
             arr[9] = 6
             writeShortBE(arr, 10, tcpLen)
             buf.copyInto(arr, 12, off, off + tcpLen)
+            return computeIpChecksum(arr, 0, totalLen)
+        }
+
+        fun buildIpUdpPacket(
+            srcIp: Int, dstIp: Int,
+            srcPort: Int, dstPort: Int,
+            payload: ByteArray, payloadOff: Int, payloadLen: Int
+        ): ByteArray {
+            val udpLen = 8 + payloadLen
+            val totalLen = 20 + udpLen
+            val pkt = ByteArray(totalLen)
+            pkt[0] = 0x45
+            writeShortBE(pkt, 2, totalLen)
+            writeShortBE(pkt, 4, 0)
+            writeShortBE(pkt, 6, 0x4000)
+            pkt[8] = 64
+            pkt[9] = 17
+            writeShortBE(pkt, 10, 0)
+            writeIntBE(pkt, 12, srcIp)
+            writeIntBE(pkt, 16, dstIp)
+            writeShortBE(pkt, 20, srcPort)
+            writeShortBE(pkt, 22, dstPort)
+            writeShortBE(pkt, 24, udpLen)
+            writeShortBE(pkt, 26, 0)
+            payload.copyInto(pkt, 28, payloadOff, payloadOff + payloadLen)
+            val cksum = computeUdpChecksum(srcIp, dstIp, pkt, 20, udpLen)
+            writeShortBE(pkt, 26, cksum)
+            val ipCksum = computeIpChecksum(pkt, 0, 20)
+            writeShortBE(pkt, 10, ipCksum)
+            return pkt
+        }
+
+        fun computeUdpChecksum(srcIp: Int, dstIp: Int, buf: ByteArray, off: Int, udpLen: Int): Int {
+            val totalLen = 12 + udpLen
+            val arr = ByteArray(totalLen)
+            writeIntBE(arr, 0, srcIp)
+            writeIntBE(arr, 4, dstIp)
+            arr[8] = 0
+            arr[9] = 17
+            writeShortBE(arr, 10, udpLen)
+            buf.copyInto(arr, 12, off, off + udpLen)
             return computeIpChecksum(arr, 0, totalLen)
         }
 

@@ -156,13 +156,56 @@ object SingBoxLinkImporter {
 
     private fun parseHysteria2(link: String, idx: Int, warnings: MutableList<String>): JSONObject {
         val uri = java.net.URI(link)
+        val query = parseQuery(uri.rawQuery ?: "")
+        val fm = parseFm(query["fm"])
+
+        val tls = JSONObject().apply {
+            put("enabled", true)
+            query["sni"]?.let { put("server_name", it) }
+            if (query["insecure"] == "1" || query["allowInsecure"] == "1") put("insecure", true)
+            query["alpn"]?.let { put("alpn", org.json.JSONArray(it.split(",").map { it.trim() })) }
+            query["pinSHA256"]?.let { put("pin_sha256", it) }
+        }
+
         return JSONObject().apply {
             put("type", "hysteria2")
             put("tag", "proxy-${idx + 1}")
             put("server", uri.host ?: "")
             put("server_port", if (uri.port > 0) uri.port else 443)
             put("password", uri.userInfo ?: "")
+            put("tls", tls)
+            val obfsType = query["obfs"] ?: fm?.optJSONArray("udp")?.optJSONObject(0)?.optString("type")
+            if (obfsType != null) {
+                val objs = JSONObject()
+                objs.put("type", obfsType)
+                val obfsPass = query["obfs-password"]
+                    ?: fm?.optJSONArray("udp")?.optJSONObject(0)?.optJSONObject("settings")?.optString("password")
+                if (obfsPass != null) objs.put("password", obfsPass)
+                put("obfs", objs)
+            }
         }
+    }
+
+    /** Разбирает URL query-строку в Map. */
+    private fun parseQuery(query: String): Map<String, String> {
+        val map = mutableMapOf<String, String>()
+        for (part in query.split("&")) {
+            val eq = part.indexOf('=')
+            if (eq < 0) continue
+            val key = try { URLDecoder.decode(part.substring(0, eq), "UTF-8") } catch (_: Exception) { part.substring(0, eq) }
+            val value = try { URLDecoder.decode(part.substring(eq + 1), "UTF-8") } catch (_: Exception) { part.substring(eq + 1) }
+            map[key] = value
+        }
+        return map
+    }
+
+    /** Парсит fm-параметр (URL-encoded JSON с quicParams/udp). */
+    private fun parseFm(fm: String?): JSONObject? {
+        if (fm.isNullOrBlank()) return null
+        return try {
+            val decoded = URLDecoder.decode(fm, "UTF-8")
+            JSONObject(decoded)
+        } catch (_: Exception) { null }
     }
 
     private fun parseTuic(link: String, idx: Int, warnings: MutableList<String>): JSONObject {

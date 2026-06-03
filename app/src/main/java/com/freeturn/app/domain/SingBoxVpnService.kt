@@ -21,9 +21,14 @@ import com.freeturn.app.data.SplitTunnelMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -35,6 +40,7 @@ class SingBoxVpnService : VpnService() {
     private val singBoxRef = AtomicReference<SingBoxTunnelManager?>(null)
     private lateinit var prefs: AppPreferences
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val mutex = Mutex()
 
     companion object {
         const val ACTION_START = "com.freeturn.app.SINGBOX_VPN_START"
@@ -60,74 +66,115 @@ class SingBoxVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                val cfg = readConfig()
-                if (cfg == null) {
-                    ProxyServiceState.setStartupResult(StartupResult.Failed("config read failed"))
-                    return START_NOT_STICKY
+                startForeground(NOTIF_ID, buildNotification())
+                scope.launch {
+                    val cfg = readConfig()
+                    if (cfg == null) {
+                        ProxyServiceState.setStartupResult(StartupResult.Failed("config read failed"))
+                        return@launch
+                    }
+                    doStartVpn(cfg)
                 }
-                startForeground(NOTIF_ID, buildNotification(cfg))
-                scope.launch { doStartVpn(cfg) }
             }
             ACTION_STOP -> scope.launch { doStopVpn() }
         }
         return START_NOT_STICKY
     }
 
-    private fun readConfig(): ClientConfig? {
-        return try {
-            kotlinx.coroutines.runBlocking { prefs.clientConfigFlow.first() }
-        } catch (e: Throwable) {
-            ProxyServiceState.addLog("sing-box VPN: config read failed: ${e.message}")
-            null
-        }
+    private suspend fun readConfig(): ClientConfig? {
+        return try { prefs.clientConfigFlow.first() } catch (_: Exception) { null }
     }
 
     private suspend fun doStartVpn(cfg: ClientConfig) {
-        if (running.getAndSet(true)) return
-        if (!cfg.singBoxActive) {
-            ProxyServiceState.addLog("sing-box VPN: not active in config")
-            running.set(false)
-            return
-        }
-
-        try {
-            val builder = Builder()
-                .setSession("FreeTurn sing-box")
-                .setMtu(1500)
-                .addAddress(InetAddress.getByName(VPN_ADDRESS), VPN_NETMASK)
-                .addRoute(InetAddress.getByName("0.0.0.0"), 0)
-                .addDnsServer(InetAddress.getByName("8.8.8.8"))
-                .addDnsServer(InetAddress.getByName("1.1.1.1"))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                builder.setBlocking(true)
+        mutex.withLock {
+            if (running.getAndSet(true)) return@withLock
+            if (!cfg.singBoxActive) {
+                ProxyServiceState.addLog("sing-box VPN: not active in config")
+                running.set(false)
+                return@withLock
             }
-            applySplitTunnel(builder, cfg)
 
-            val pfd = builder.establish() ?: throw IllegalStateException("VpnService.Builder.establish() returned null")
-            tunPfd = pfd
-            ProxyServiceState.addLog("sing-box VPN: tun interface established")
+            try {
+                // Pre-resolve hostnames BEFORE VpnService — uses physical network DNS
+                val manager = SingBoxTunnelManager(applicationContext)
+                singBoxRef.set(manager)
+                manager.preResolveConfig(cfg.singBoxConfig)
 
-            val manager = SingBoxTunnelManager(applicationContext)
-            singBoxRef.set(manager)
-            manager.startAfterProxyReady(cfg, SOCKS_PORT)
+                val dnsList = cfg.singBoxDnsServers
+                    .split(",", " ", "\n")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .take(4)
+                    .onEach { ProxyServiceState.addLog("sing-box VPN: DNS server $it") }
+                if (dnsList.isEmpty()) {
+                    ProxyServiceState.addLog("sing-box VPN: no DNS servers configured, using 8.8.8.8")
+                }
 
-            val forwarder = TunForwarder(pfd.fileDescriptor, "127.0.0.1", SOCKS_PORT)
-            forwarderRef.set(forwarder)
-            forwarder.start()
+                val builder = Builder()
+                    .setSession("FreeTurn sing-box")
+                    .setMtu(1500)
+                    .addAddress(InetAddress.getByName(VPN_ADDRESS), VPN_NETMASK)
+                    .addRoute(InetAddress.getByName("0.0.0.0"), 0)
+                val dnsAddresses = dnsList.map { InetAddress.getByName(it) }
+                dnsAddresses.forEach { builder.addDnsServer(it) }
+                if (dnsAddresses.isEmpty()) {
+                    builder.addDnsServer(InetAddress.getByName("8.8.8.8"))
+                }
+                applySplitTunnel(builder, cfg)
 
-            ProxyServiceState.setStartupResult(StartupResult.Success)
-            ProxyServiceState.setConnectionStats(ConnectionStats(1, 1))
-            ProxyServiceState.markConnectedIfAbsent(SystemClock.elapsedRealtime())
-            ProxyServiceState.addLog("sing-box VPN: running")
-        } catch (e: Throwable) {
-            ProxyServiceState.addLog("sing-box VPN error: ${e.message}")
-            ProxyServiceState.setStartupResult(StartupResult.Failed(e.message ?: "VPN error"))
-            doStopVpn()
-            if (e is VirtualMachineError) throw e
+                val pfd = builder.establish() ?: throw IllegalStateException("VpnService.Builder.establish() returned null")
+                tunPfd = pfd
+                ProxyServiceState.addLog("sing-box VPN: tun interface established")
+
+                manager.startAfterProxyReady(cfg, SOCKS_PORT)
+
+                waitForSocksPort(SOCKS_PORT)
+
+                val forwarder = TunForwarder(pfd.fileDescriptor, "127.0.0.1", SOCKS_PORT)
+                forwarderRef.set(forwarder)
+                forwarder.start()
+
+                ProxyServiceState.setStartupResult(StartupResult.Success)
+                ProxyServiceState.setConnectionStats(ConnectionStats(1, 1))
+                ProxyServiceState.markConnectedIfAbsent(SystemClock.elapsedRealtime())
+                ProxyServiceState.addLog("sing-box VPN: running (socks+forwarder)")
+            } catch (e: Throwable) {
+                ProxyServiceState.addLog("sing-box VPN error: ${e.message}")
+                ProxyServiceState.setStartupResult(StartupResult.Failed(e.message ?: "VPN error"))
+                teardownVpn()
+                if (e is VirtualMachineError) throw e
+            }
         }
     }
 
+    private suspend fun waitForSocksPort(port: Int) {
+        for (i in 1..30) {
+            try {
+                Socket().use { s ->
+                    s.connect(InetSocketAddress("127.0.0.1", port), 500)
+                }
+                return
+            } catch (_: Exception) {}
+            delay(500)
+        }
+        ProxyServiceState.addLog("sing-box VPN: SOCKS5 port $port not ready after 15s")
+    }
+
+    private fun teardownVpn() {
+        running.set(false)
+        forwarderRef.getAndSet(null)?.stop()
+        singBoxRef.getAndSet(null)?.let {
+            kotlinx.coroutines.runBlocking { it.stop() }
+        }
+        tunPfd?.let { runCatching { it.close() } }
+        tunPfd = null
+    }
+
     private suspend fun doStopVpn() {
+        mutex.withLock { realStopVpn() }
+    }
+
+    private suspend fun realStopVpn() {
         running.set(false)
         forwarderRef.getAndSet(null)?.stop()
         singBoxRef.getAndSet(null)?.let {
@@ -168,7 +215,7 @@ class SingBoxVpnService : VpnService() {
         super.onRevoke()
     }
 
-    private fun buildNotification(cfg: ClientConfig): Notification {
+    private fun buildNotification(): Notification {
         val stopIntent = PendingIntent.getService(
             this, 0,
             Intent(this, SingBoxVpnService::class.java).apply { action = ACTION_STOP },
@@ -181,7 +228,7 @@ class SingBoxVpnService : VpnService() {
         )
         return NotificationCompat.Builder(this, NOTIF_CHANNEL)
             .setContentTitle("FreeTurn sing-box")
-            .setContentText(if (cfg.tcpForward) "TCP forward" else "VPN active")
+            .setContentText("VPN active")
             .setSmallIcon(android.R.drawable.ic_menu_preferences)
             .setOngoing(true)
             .setContentIntent(openIntent)

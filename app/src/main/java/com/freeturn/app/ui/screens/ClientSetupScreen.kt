@@ -92,6 +92,7 @@ fun ClientSetupScreen(
     // (если запущен), иначе сохранённое. В !sync режиме — всегда сохранённое:
     // серверная и клиентская стороны могут различаться, и UI отражает клиента.
     val syncOn = saved.syncServerSwitches
+    val isSingBox = saved.tunnelTransport == TunnelTransport.SING_BOX
     val effectiveTcpForward = if (syncOn && serverKnown?.running == true) serverKnown.tcpMode ?: saved.tcpForward else saved.tcpForward
     val effectiveObfProfile = if (syncOn && serverKnown?.running == true) serverKnown.obfProfile ?: serverOpts.obfProfile else serverOpts.obfProfile
 
@@ -183,7 +184,8 @@ fun ClientSetupScreen(
                     placeholder = { Text(stringResource(R.string.server_address_placeholder)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    readOnly = privacyMode,
+                    readOnly = privacyMode || isSingBox,
+                    enabled = !isSingBox,
                     supportingText = { Text(stringResource(R.string.server_address_support)) }
                 )
 
@@ -195,7 +197,8 @@ fun ClientSetupScreen(
                         placeholder = { Text(stringResource(R.string.call_link_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        readOnly = privacyMode,
+                        readOnly = privacyMode || isSingBox,
+                        enabled = !isSingBox,
                         supportingText = { Text(stringResource(R.string.call_link_support)) }
                     )
                 }
@@ -207,7 +210,8 @@ fun ClientSetupScreen(
                     placeholder = { Text(stringResource(R.string.local_listen_placeholder)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    readOnly = privacyMode,
+                    readOnly = privacyMode || isSingBox,
+                    enabled = !isSingBox,
                     supportingText = { Text(stringResource(R.string.local_listen_support)) }
                 )
 
@@ -242,6 +246,7 @@ fun ClientSetupScreen(
                         },
                         valueRange = 1f..128f,
                         steps = 0,
+                        enabled = !isSingBox,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -290,6 +295,7 @@ fun ClientSetupScreen(
                         dnsOptions.forEachIndexed { idx, (value, label) ->
                             SegmentedButton(
                                 selected = saved.dnsMode == value,
+                                enabled = !isSingBox,
                                 onClick = {
                                     HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
                                     settingsViewModel.setDnsMode(value)
@@ -313,6 +319,7 @@ fun ClientSetupScreen(
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         SegmentedButton(
                             selected = !saved.useUdp,
+                            enabled = !isSingBox,
                             onClick = {
                                 HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
                                 settingsViewModel.setUseUdp(false)
@@ -321,6 +328,7 @@ fun ClientSetupScreen(
                         ) { Text(stringResource(R.string.tcp)) }
                         SegmentedButton(
                             selected = saved.useUdp,
+                            enabled = !isSingBox,
                             onClick = {
                                 HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
                                 settingsViewModel.setUseUdp(true)
@@ -336,6 +344,7 @@ fun ClientSetupScreen(
                     label = stringResource(R.string.manual_captcha),
                     description = stringResource(R.string.manual_captcha_desc),
                     checked = saved.manualCaptcha,
+                    enabled = !isSingBox,
                     onCheckedChange = {
                         HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
                         settingsViewModel.setManualCaptcha(it)
@@ -346,6 +355,7 @@ fun ClientSetupScreen(
                     label = stringResource(R.string.use_carrier_dns),
                     description = stringResource(R.string.use_carrier_dns_desc),
                     checked = saved.useCarrierDns,
+                    enabled = !isSingBox,
                     onCheckedChange = {
                         HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
                         settingsViewModel.setUseCarrierDns(it)
@@ -356,6 +366,7 @@ fun ClientSetupScreen(
                     label = stringResource(R.string.debug_mode),
                     description = stringResource(R.string.debug_mode_desc),
                     checked = saved.debugMode,
+                    enabled = !isSingBox,
                     onCheckedChange = {
                         HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
                         settingsViewModel.setDebugMode(it)
@@ -366,6 +377,7 @@ fun ClientSetupScreen(
                     label = stringResource(R.string.magic_switch),
                     description = stringResource(R.string.magic_switch_desc),
                     checked = saved.magicSwitch,
+                    enabled = !isSingBox,
                     onCheckedChange = {
                         HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
                         settingsViewModel.setMagicSwitch(it)
@@ -380,7 +392,8 @@ fun ClientSetupScreen(
                         placeholder = { Text(stringResource(R.string.magic_switch_address_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        readOnly = privacyMode,
+                        readOnly = privacyMode || isSingBox,
+                        enabled = !isSingBox,
                         supportingText = { Text(stringResource(R.string.magic_switch_address_support)) }
                     )
                 }
@@ -392,6 +405,7 @@ fun ClientSetupScreen(
                         label = stringResource(R.string.client_bond),
                         description = stringResource(R.string.client_bond_desc),
                         checked = saved.bond,
+                        enabled = !isSingBox,
                         onCheckedChange = {
                             HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
                             settingsViewModel.setBond(it)
@@ -453,6 +467,7 @@ fun ClientSetupScreen(
                     label = stringResource(R.string.sync_server_switches),
                     description = stringResource(R.string.sync_server_switches_desc),
                     checked = syncOn,
+                    enabled = !isSingBox,
                     onCheckedChange = {
                         HapticUtil.perform(context, if (it) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
                         settingsViewModel.setSyncServerSwitches(it)
@@ -461,7 +476,7 @@ fun ClientSetupScreen(
 
                 // В sync-режиме менять эти флаги без SSH опасно (рассинхрон).
                 // В !sync — клиентские, SSH не нужен.
-                val controlsEnabled = if (syncOn) isSshConnected else true
+                val controlsEnabled = !isSingBox && if (syncOn) isSshConnected else true
                 val lockedHint = if (syncOn)
                     stringResource(R.string.locked_disconnect_hint) else null
 
@@ -614,7 +629,7 @@ fun ClientSetupScreen(
                     Button(
                         onClick = onFinish,
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = serverAddress.isNotBlank() && vkLink.isNotBlank(),
+                        enabled = (serverAddress.isNotBlank() && vkLink.isNotBlank()) || isSingBox,
                         shape = MaterialTheme.shapes.large
                     ) {
                         Text(stringResource(R.string.finish_setup), style = MaterialTheme.typography.labelLarge)
