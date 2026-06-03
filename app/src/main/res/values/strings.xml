@@ -21,10 +21,6 @@
     <string name="start_proxy">Запустить прокси</string>
     <string name="connection">Соединение</string>
     <string name="not_connected">Не сопряжено</string>
-    <string name="connected_format">Сопряжено: %1$s</string>
-    <string name="error_format_short">Ошибка: %1$s</string>
-    <string name="change">Изменить</string>
-    <string name="configure">Настроить</string>
     <string name="android_client">Android-клиент</string>
     <string name="proxy_core">Прокси-ядро</string>
     <string name="btn_open">Открыть</string>
@@ -211,24 +207,15 @@
     <string name="profile_name_label">Название профиля</string>
     <string name="profile_name_placeholder">Например, «Мой VPS»</string>
     <string name="profile_save">Сохранить</string>
-    <string name="profile_active">Активен</string>
     <string name="profile_rename">Переименовать</string>
     <string name="profile_delete">Удалить</string>
     <string name="profile_delete_title">Удалить профиль?</string>
     <string name="profile_delete_desc">Профиль «%1$s» будет удалён. Это действие нельзя отменить.</string>
-    <string name="profile_switcher_title">Профиль</string>
-    <string name="profile_manage">Управлять профилями</string>
-    <string name="nav_profiles">Профили</string>
-    <string name="profile_actions_title">Профили</string>
-    <string name="profile_save_current_hint">Создаст новый профиль с текущими SSH и клиентскими настройками</string>
     <string name="profile_more">Ещё</string>
     <string name="profile_default_name">Новый профиль</string>
-    <string name="profile_section_saved">Сохранённые профили</string>
-    <string name="profile_close">Закрыть</string>
     <string name="profile_name_taken">Профиль с таким именем уже существует</string>
     <string name="profile_unsaved_label">Несохранённая конфигурация</string>
     <string name="profile_update_current">Обновить активный профиль</string>
-    <string name="profile_update_current_hint">Перезаписать текущими настройками</string>
     <string name="profile_updated_toast">Профиль обновлён</string>
 
     <!-- Notification & Tile -->
