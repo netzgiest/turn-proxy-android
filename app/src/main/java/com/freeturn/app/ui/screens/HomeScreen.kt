@@ -226,10 +226,9 @@ fun HomeScreen(
                 .widthIn(max = 840.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Spacer(Modifier.height(40.dp))
-
             ProxyToggleButton(
                 state = proxyState,
                 onClick = {
@@ -280,8 +279,6 @@ fun HomeScreen(
                 },
                 textAlign = TextAlign.Center
             )
-
-            Spacer(Modifier.height(32.dp))
         }
 
         // Ссылка-индикатор split-tunneling прямо над свёрнутым листом сервера.
