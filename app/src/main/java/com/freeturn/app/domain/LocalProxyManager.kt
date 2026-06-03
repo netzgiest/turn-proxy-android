@@ -8,6 +8,7 @@ import com.freeturn.app.ProxyService
 import com.freeturn.app.ProxyServiceState
 import com.freeturn.app.StartupResult
 import com.freeturn.app.data.ClientConfig
+import com.freeturn.app.domain.SingBoxVpnService
 import com.freeturn.app.viewmodel.ProxyState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -124,6 +125,38 @@ class LocalProxyManager(private val context: Context) {
         if (ProxyServiceState.isRunning.value) return
         if (_proxyState.value is ProxyState.Error) _proxyState.value = ProxyState.Idle
 
+        // sing-box VPN mode — запускаем VpnService напрямую (без ProxyService)
+        if (cfg.singBoxActive) {
+            _proxyState.value = ProxyState.Starting
+            ProxyServiceState.clearLogs()
+            ProxyServiceState.setStartupResult(null)
+            ProxyServiceState.setConnectionStats(ConnectionStats.IDLE)
+            ProxyServiceState.clearConnectedSince()
+
+            val intent = Intent(context, SingBoxVpnService::class.java).apply {
+                action = SingBoxVpnService.ACTION_START
+            }
+            context.startService(intent)
+
+            val result = withTimeoutOrNull(15_000L) {
+                ProxyServiceState.startupResult.first { it != null }
+            }
+            when (result) {
+                null -> {
+                    stopProxy()
+                    setErrorWithAutoReset("sing-box VPN не запустился")
+                }
+                is StartupResult.Failed -> {
+                    stopProxy()
+                    setErrorWithAutoReset(result.message)
+                }
+                is StartupResult.Success -> {
+                    _proxyState.value = ProxyState.Running(1, 1)
+                }
+            }
+            return
+        }
+
         if (!cfg.isRawMode && (cfg.serverAddress.isBlank() || cfg.vkLink.isBlank())) {
             setErrorWithAutoReset("Не заполнены настройки клиента")
             return
@@ -146,14 +179,7 @@ class LocalProxyManager(private val context: Context) {
             context.startService(intent)
         }
 
-        // Умное ожидание стартапа. Watchdog внутри сервиса делает до MAX_RESTARTS
-        // попыток с backoff до 30с — фиксированный таймаут (20с) обрывал UI ещё
-        // на первой-второй ретрай-итерации. Теперь ждём пока:
-        //   • сервис не отдаст StartupResult (Success/Failed), ИЛИ
-        //   • сервис не остановится сам (watchdog исчерпал лимит → isRunning=false).
-        // Верхняя граница в 5 минут — страховка от подвисшего сервиса.
         val result = withTimeoutOrNull(5 * 60_000L) {
-            // Дождаться, что сервис фактически поднялся (onStartCommand).
             ProxyServiceState.isRunning.first { it }
             combine(
                 ProxyServiceState.startupResult,
@@ -186,6 +212,10 @@ class LocalProxyManager(private val context: Context) {
     }
 
     fun stopProxy() {
+        val intent = Intent(context, SingBoxVpnService::class.java).apply {
+            action = SingBoxVpnService.ACTION_STOP
+        }
+        context.startService(intent)
         context.stopService(Intent(context, ProxyService::class.java))
         _proxyState.value = ProxyState.Idle
     }

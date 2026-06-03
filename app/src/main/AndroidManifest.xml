@@ -76,6 +76,17 @@
             </intent-filter>
         </service>
 
+        <!-- VPN-сервис sing-box: поднимает VPN и направляет трафик через ядро sing-box. -->
+        <service
+            android:name=".domain.SingBoxVpnService"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

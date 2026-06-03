@@ -179,7 +179,7 @@ fun HomeScreen(
     }
 
     fun startProxyWithTunnel() {
-        if (clientConfig.wireGuardActive) {
+        if (clientConfig.wireGuardActive || clientConfig.singBoxActive) {
             val vpnIntent = VpnService.prepare(context)
             if (vpnIntent != null) {
                 wireGuardPermissionLauncher.launch(vpnIntent)
