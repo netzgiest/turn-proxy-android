@@ -592,7 +592,6 @@ class ProxyService : Service() {
         // выглядело бы как смена сети и уводило прокси в бесконечный рестарт.
         fun schedulePhysicalNetworkCheck(reason: String) {
             if (SystemClock.elapsedRealtime() - registeredAt < NETWORK_CALLBACK_WARMUP_MS) {
-                ProxyServiceState.addLog("=== СЕТЬ: начальное событие проигнорировано ($reason) ===")
                 return
             }
             networkDebounceJob?.cancel()
