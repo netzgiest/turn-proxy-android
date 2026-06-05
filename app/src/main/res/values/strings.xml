@@ -216,6 +216,13 @@
     <string name="profile_unsaved_label">Несохранённая конфигурация</string>
     <string name="profile_update_current">Обновить активный профиль</string>
     <string name="profile_updated_toast">Профиль обновлён</string>
+    <string name="profile_export">Экспорт</string>
+    <string name="profile_export_title">Экспорт профиля</string>
+    <string name="profile_export_all">Экспорт всех</string>
+    <string name="profile_export_all_title">Экспорт всех профилей</string>
+    <string name="profile_import">Импорт</string>
+    <string name="profile_import_from_clipboard">Импорт из буфера</string>
+    <string name="profile_imported_toast">Импортировано профилей: %1$d</string>
 
     <!-- Notification & Tile -->
     <string name="notif_proxy_stop_action">Отключить</string>
