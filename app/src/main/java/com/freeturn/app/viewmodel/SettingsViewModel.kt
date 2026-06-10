@@ -15,6 +15,10 @@ import com.freeturn.app.domain.AppUpdater
 import com.freeturn.app.domain.LocalProxyManager
 import com.freeturn.app.domain.ProxyOrchestrator
 import com.freeturn.app.domain.SshRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +56,9 @@ class SettingsViewModel(
     val dynamicTheme: StateFlow<Boolean> = prefs.dynamicThemeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    val nerdMode: StateFlow<Boolean> = prefs.nerdModeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     val profilesSnapshot: StateFlow<ProfilesSnapshot> = prefs.profilesSnapshot
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfilesSnapshot())
 
@@ -70,6 +77,12 @@ class SettingsViewModel(
     val privacyMode: StateFlow<Boolean> = _privacyMode.asStateFlow()
 
     private val profileMutex = Mutex()
+
+    // Дебаунс быстрых тыков тоггла синка: persist мгновенный, а дорогой сетевой
+    // side-effect (SSH stop+start + рестарт прокси) откладывается и коалесцируется.
+    private val syncSideEffectMutex = Mutex()
+    private var syncSideEffectJob: Job? = null
+    private val syncSideEffectDebounceMs = 600L
 
     init {
         viewModelScope.launch {
@@ -90,6 +103,10 @@ class SettingsViewModel(
 
     fun setDynamicTheme(enabled: Boolean) {
         viewModelScope.launch { prefs.setDynamicTheme(enabled) }
+    }
+
+    fun setNerdMode(enabled: Boolean) {
+        viewModelScope.launch { prefs.setNerdMode(enabled) }
     }
 
     fun setTgSubscribeShown() {
@@ -333,9 +350,25 @@ class SettingsViewModel(
                 persistClient(current.copy(syncServerSwitches = enabled))
                 true
             }
-            if (changed && enabled) {
-                orchestrator.restartServerIfRunning()
-                orchestrator.restartProxyIfRunning()
+            if (!changed) return@launch
+            // Дебаунс: отменяем отложенный side-effect, перепланируем. delay — окно
+            // отмены (гасит спам ON/OFF/ON → один рестарт). Сам рестарт под mutex
+            // (две последовательности не интерливятся) и NonCancellable (новый тык не
+            // рвёт SSH-команду на полпути). Читаем ФИНАЛЬНОЕ состояние после дебаунса —
+            // рестартим только если синк в итоге включён (…→OFF → ноль рестартов).
+            // Смерть процесса в окне дебаунса оставит сервер на старом конфиге при
+            // новом тоггле — принято: probe хаба покажет live-режим, любой следующий
+            // apply/старт приводит сервер в соответствие.
+            syncSideEffectJob?.cancel()
+            syncSideEffectJob = viewModelScope.launch {
+                delay(syncSideEffectDebounceMs)
+                syncSideEffectMutex.withLock {
+                    if (!prefs.clientConfigFlow.first().syncServerSwitches) return@withLock
+                    withContext(NonCancellable) {
+                        orchestrator.restartServerIfRunning()
+                        orchestrator.restartProxyIfRunning()
+                    }
+                }
             }
         }
     }
@@ -378,6 +411,37 @@ class SettingsViewModel(
             if (changed) {
                 if (sync) orchestrator.restartServerIfRunning()
                 orchestrator.restartProxyIfRunning()
+            }
+        }
+    }
+
+    /**
+     * Apply-модель «Настроек сервера» для НЕактивного профиля (sync OFF): серверные
+     * параметры тут клиент-локальны, поэтому пишем ТОЛЬКО снимок профиля по id — ни
+     * legacy-ключи, ни рантайм (SSH/прокси активного сервера) не трогаем. Без живого SSH
+     * obf-ключ на сервере не генерим: пустой остаётся пустым (клиент стартует как есть).
+     */
+    fun applyProfileServerConfig(
+        id: String,
+        listen: String,
+        connect: String,
+        tcpForward: Boolean,
+        obfProfile: String,
+        obfKey: String
+    ) {
+        viewModelScope.launch {
+            profileMutex.withLock {
+                val snap = prefs.profilesSnapshot.first()
+                val target = snap.list.firstOrNull { it.id == id } ?: return@withLock
+                val effKey = obfKey.trim().ifBlank { target.server.obfKey }
+                val next = target.copy(
+                    proxyListen = listen,
+                    proxyConnect = connect,
+                    client = target.client.copy(tcpForward = tcpForward),
+                    server = target.server.copy(obfProfile = obfProfile, obfKey = effKey)
+                )
+                if (next == target) return@withLock
+                prefs.saveProfiles(snap.list.map { if (it.id == id) next else it })
             }
         }
     }

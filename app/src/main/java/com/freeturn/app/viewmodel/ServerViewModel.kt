@@ -31,7 +31,7 @@ class ServerViewModel(
     val sshState: StateFlow<SshConnectionState> = sshRepository.sshState
     val serverState: StateFlow<ServerState> = sshRepository.serverState
     val sshLog: StateFlow<List<String>> = sshRepository.sshLog
-    val serverLogs: StateFlow<String?> = sshRepository.serverLogs
+    val journalLoading: StateFlow<Boolean> = sshRepository.journalLoading
 
     val serverOpts: StateFlow<AppPreferences.ServerOpts> = prefs.serverOptsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppPreferences.ServerOpts())
@@ -39,21 +39,19 @@ class ServerViewModel(
     val sshConfig: StateFlow<SshConfig> = prefs.sshConfigFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SshConfig())
 
-    private val _serverInstallStage = MutableStateFlow<String?>(null)
-
     private val _isRegeneratingObfKey = MutableStateFlow(false)
     val isRegeneratingObfKey: StateFlow<Boolean> = _isRegeneratingObfKey.asStateFlow()
 
     /**
-     * Сводный статус АКТИВНОГО сервера для хаба — одна модель из 3 потоков. Profile-контекст
+     * Сводный статус АКТИВНОГО сервера для хаба — одна модель из 2 потоков. Profile-контекст
      * (активность профиля, наличие SSH) добавляет экран. Промежуточные фазы коллапсятся в
      * [ServerHubStatus.Connecting]: от cold start до готовности — один переход в [ServerHubStatus.Online].
      */
     val hubStatus: StateFlow<ServerHubStatus> =
-        combine(sshState, serverState, _serverInstallStage) { ssh, server, stage ->
+        combine(sshState, serverState) { ssh, server ->
             when {
-                ssh is SshConnectionState.Error -> ServerHubStatus.Failed(ssh.message)
-                server is ServerState.Error -> ServerHubStatus.Failed(server.message)
+                ssh is SshConnectionState.Error -> ServerHubStatus.Failed
+                server is ServerState.Error -> ServerHubStatus.Failed
                 server is ServerState.Working -> ServerHubStatus.Working(server.action)
                 ssh is SshConnectionState.Connected && server is ServerState.Known ->
                     ServerHubStatus.Online(
@@ -62,7 +60,6 @@ class ServerViewModel(
                         tcpMode = server.tcpMode,
                         obfProfile = server.obfProfile,
                         version = server.version,
-                        installStage = stage,
                         sshIp = ssh.ip
                     )
                 // Disconnected / Connecting / Connected+Checking → единый busy-визуал.
@@ -97,10 +94,8 @@ class ServerViewModel(
 
     fun installServer() {
         viewModelScope.launch {
-            _serverInstallStage.value = null
             val outcome = sshRepository.installServer()
             if (outcome is com.freeturn.app.domain.InstallOutcome.Success) {
-                _serverInstallStage.value = outcome.stage
                 if (outcome.stage == "downloaded") {
                     val current = prefs.serverOptsFlow.first()
                     if (current.obfKey.isBlank()) {
@@ -145,9 +140,7 @@ class ServerViewModel(
         viewModelScope.launch { sshRepository.fetchServerLogs(lines) }
     }
 
-    fun clearServerLogs() {
-        sshRepository.clearServerLogs()
-    }
+    fun clearSshLog() = sshRepository.clearSshLog()
 
     fun regenerateObfKey() {
         viewModelScope.launch {

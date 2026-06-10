@@ -2,6 +2,7 @@ package com.freeturn.app.domain
 
 import android.content.Context
 import com.freeturn.app.SSHManager
+import com.freeturn.app.data.ObfProfile
 import com.freeturn.app.data.SshConfig
 import com.freeturn.app.domain.server.CmdResult
 import com.freeturn.app.domain.server.ServerCommand
@@ -32,11 +33,13 @@ class SshRepository(
     private val _serverState = MutableStateFlow<ServerState>(ServerState.Unknown)
     val serverState: StateFlow<ServerState> = _serverState.asStateFlow()
 
-    private val _serverLogs = MutableStateFlow<String?>(null)
-    val serverLogs: StateFlow<String?> = _serverLogs.asStateFlow()
-
     private val _sshLog = MutableStateFlow<List<String>>(emptyList())
     val sshLog: StateFlow<List<String>> = _sshLog.asStateFlow()
+
+    // Идёт ли запрос server.log. Сам вывод уходит в sshLog (через runCmd → logCmdResult),
+    // отдельного состояния журнала нет — он часть единого SSH-лога.
+    private val _journalLoading = MutableStateFlow(false)
+    val journalLoading: StateFlow<Boolean> = _journalLoading.asStateFlow()
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
     private fun timestamp(): String = LocalTime.now().format(timeFormatter)
@@ -105,13 +108,18 @@ class SshRepository(
         _serverState.value = ServerState.Unknown
     }
 
-    suspend fun checkServerState(config: SshConfig? = null) {
+    /**
+     * @param silent пропустить промежуточный [ServerState.Checking]. Нужно при перепроверке
+     * после действия (стоп/старт/установка): иначе хаб моргает Working→«Подключение»→Online.
+     * При silent текущий Working держится до прихода [ServerState.Known].
+     */
+    suspend fun checkServerState(config: SshConfig? = null, silent: Boolean = false) {
         val cfg = config ?: activeSshConfig ?: return
         if (cfg.ip.isEmpty()) {
             _serverState.value = ServerState.Unknown
             return
         }
-        _serverState.value = ServerState.Checking
+        if (!silent) _serverState.value = ServerState.Checking
 
         when (val r = runCmd(cfg, "Проверка состояния", ServerCommand.Probe)) {
             is CmdResult.Err -> _serverState.value = ServerState.Error(r.message)
@@ -163,7 +171,7 @@ class SshRepository(
                     // VM решает, как стартовать (с актуальными prefs).
                 }
                 delay(300)
-                checkServerState(cfg)
+                checkServerState(cfg, silent = true)
                 InstallOutcome.Success(stage = stage, version = version, needsRestart = needsRestart)
             }
         }
@@ -197,7 +205,7 @@ class SshRepository(
             return false
         }
         delay(1500)
-        checkServerState(cfg)
+        checkServerState(cfg, silent = true)
         return true
     }
 
@@ -212,21 +220,18 @@ class SshRepository(
             return
         }
         delay(1000)
-        checkServerState(cfg)
+        checkServerState(cfg, silent = true)
     }
 
-    fun clearServerLogs() {
-        _serverLogs.value = null
-    }
-
+    /** Тянет server.log по SSH. Вывод (и ошибки) пишутся в общий sshLog через runCmd. */
     suspend fun fetchServerLogs(lines: Int = 200) {
         val cfg = activeSshConfig ?: return
         if (cfg.ip.isEmpty()) return
-        _serverLogs.value = "…"
-        when (val r = runCmd(cfg, "server.log", ServerCommand.FetchLogs(lines))) {
-            is CmdResult.Err -> _serverLogs.value = "ERROR: ${r.message}"
-            is CmdResult.Ok ->
-                _serverLogs.value = r.logs.joinToString("\n").ifEmpty { "(лог пуст)" }
+        _journalLoading.value = true
+        try {
+            runCmd(cfg, "server.log", ServerCommand.FetchLogs(lines))
+        } finally {
+            _journalLoading.value = false
         }
     }
 
@@ -236,9 +241,7 @@ class SshRepository(
         if (cfg.ip.isEmpty()) return null
         return when (val r = runCmd(cfg, "Генерация obf-key", ServerCommand.GenObfKey)) {
             is CmdResult.Err -> null
-            is CmdResult.Ok -> r.kv["OBFKEY"]?.takeIf {
-                it.matches(Regex("^[0-9a-fA-F]{64}$"))
-            }
+            is CmdResult.Ok -> r.kv["OBFKEY"]?.takeIf { ObfProfile.isValidKey(it) }
         }
     }
 
@@ -246,9 +249,12 @@ class SshRepository(
         _serverState.value = state
     }
 
+    fun clearSshLog() {
+        _sshLog.value = emptyList()
+    }
+
     fun resetAll() {
         disconnect()
-        _serverLogs.value = null
         _sshLog.value = emptyList()
     }
 }
