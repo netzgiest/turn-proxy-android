@@ -2,7 +2,6 @@ package com.freeturn.app.domain
 
 import android.content.Context
 import com.freeturn.app.SSHManager
-import com.freeturn.app.data.ObfProfile
 import com.freeturn.app.data.SshConfig
 import com.freeturn.app.domain.server.CmdResult
 import com.freeturn.app.domain.server.ServerCommand
@@ -147,11 +146,7 @@ class SshRepository(
         }
     }
 
-    /**
-     * Идемпотентная установка: скрипт сам решает, скачивать или нет (по sha256).
-     * После downloaded автоматически генерим obf-ключ — он понадобится при
-     * первом start с включённой обфускацией. Возвращаемое значение — true при успехе.
-     */
+    /** Идемпотентная установка: скрипт сам решает, скачивать или нет (по sha256). */
     suspend fun installServer(): InstallOutcome {
         val cfg = activeSshConfig ?: return InstallOutcome.Failed("not connected")
         if (cfg.ip.isEmpty()) return InstallOutcome.Failed("no SSH config")
@@ -238,16 +233,6 @@ class SshRepository(
             runCmd(cfg, "server.log", ServerCommand.FetchLogs(lines))
         } finally {
             _journalLoading.value = false
-        }
-    }
-
-    /** Просит сервер сгенерировать новый obf-key. Возвращает hex или null. */
-    suspend fun generateObfKey(): String? {
-        val cfg = activeSshConfig ?: return null
-        if (cfg.ip.isEmpty()) return null
-        return when (val r = runCmd(cfg, "Генерация obf-key", ServerCommand.GenObfKey)) {
-            is CmdResult.Err -> null
-            is CmdResult.Ok -> r.kv["OBFKEY"]?.takeIf { ObfProfile.isValidKey(it) }
         }
     }
 

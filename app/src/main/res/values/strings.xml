@@ -71,9 +71,8 @@
     <string name="obf_none">Выкл</string>
     <string name="obf_rtpopus">rtpopus</string>
     <string name="provider_vk">VK Calls</string>
-    <string name="obf_key_empty_hint">Ключ не сгенерирован - нажмите кнопку ниже</string>
+    <string name="obf_key_empty_hint">Пусто - ключ сгенерируется при применении</string>
     <string name="obf_key_invalid_hint">Неверный формат - нужны 64 hex-символа</string>
-    <string name="obf_key_regen_in_progress">Генерация ключа…</string>
     <string name="server_sync_section">Синхронные настройки сервера</string>
     <string name="sync_server_switches">Синхронизировать с сервером</string>
     <string name="sync_off_banner">Sync с сервером выключен. Следите за совпадением вручную.</string>
@@ -94,7 +93,6 @@
     <string name="dns_custom_invalid">Часть значений не похожа на DNS-адреса — они будут пропущены</string>
 
     <string name="obf_select_profile_hint">Выберите профиль rtpopus, чтобы задать ключ обфускации.</string>
-    <string name="obf_key_manual_hint">Без SSH-подключения введите/вставьте 64-hex ключ вручную.</string>
 
     <!-- LogsScreen -->
     <string name="logs_title">Логи</string>
@@ -116,7 +114,7 @@
     <string name="server_install">Установить</string>
     <string name="server_update">Обновить</string>
     <string name="server_obf_key_label">Obf-ключ (64 hex)</string>
-    <string name="obf_key_regen">Сгенерировать новый ключ на сервере</string>
+    <string name="obf_key_regen">Сгенерировать новый ключ</string>
     <string name="start_server">Запустить сервер</string>
     <string name="stop_server">Остановить сервер</string>
     <string name="ssh_log_title">SSH-лог</string>

@@ -9,7 +9,6 @@ sealed class ServerCommand {
     data object Install : ServerCommand()
     data class Start(val opts: ServerOptions) : ServerCommand()
     data object Stop : ServerCommand()
-    data object GenObfKey : ServerCommand()
     data class FetchLogs(val lines: Int = 80) : ServerCommand()
 
     fun toArgv(): List<String> = when (this) {
@@ -29,7 +28,6 @@ sealed class ServerCommand {
             }
         }
         is Stop -> listOf("stop")
-        is GenObfKey -> listOf("gen-obf-key")
         is FetchLogs -> listOf("logs", "--tail=$lines")
     }
 }

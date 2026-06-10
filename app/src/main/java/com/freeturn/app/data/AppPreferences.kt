@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.io.IOException
+import java.security.SecureRandom
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_prefs")
 
@@ -47,6 +48,10 @@ object ObfProfile {
 
     /** Ключ -obf-key, который примет ядро (DecodeKey). Единая проверка для argv, UI и regen. */
     fun isValidKey(key: String): Boolean = key.matches(KEY_REGEX)
+
+    /** Новый случайный obf-ключ (32 байта → 64-hex). Ядру важен только формат. */
+    fun generateKey(): String =
+        ByteArray(32).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
 }
 
 /**

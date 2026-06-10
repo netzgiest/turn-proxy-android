@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -31,7 +29,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.freeturn.app.R
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -107,10 +104,8 @@ fun ServerManagementScreen(
     val privacyMode by settingsViewModel.privacyMode.collectAsStateWithLifecycle()
     val clientCfg by settingsViewModel.clientConfig.collectAsStateWithLifecycle()
     val serverOpts by serverViewModel.serverOpts.collectAsStateWithLifecycle()
-    val isRegen by serverViewModel.isRegeneratingObfKey.collectAsStateWithLifecycle()
-
-    // Источник серверных черновиков: активный сервер рулит живым конфигом (его
-    // обновляет regen на сервере), неактивный — снимком by-id (sync OFF, клиент-локально).
+    // Источник серверных черновиков: активный сервер рулит живым конфигом,
+    // неактивный — снимком by-id (sync OFF, клиент-локально).
     val effClient = if (isActive) clientCfg else (server?.client ?: clientCfg)
     val effServer = if (isActive) serverOpts else (server?.opts ?: serverOpts)
 
@@ -144,12 +139,10 @@ fun ServerManagementScreen(
         tcpDraft != effClient.tcpForward ||
         obfDraft != effServer.obfProfile ||
         keyDraft != effServer.obfKey
-    // Ключ валиден для применения: обфускация выкл, 64 hex, либо пусто при живом SSH
-    // и sync ON — только тогда applyServerConfig сгенерит ключ на сервере. Иначе пустой
-    // ключ блокирует apply: в конфиг уехала бы обфускация без ключа, которую CoreArgs
-    // молча отбросит при запуске клиента.
-    val keyOkForApply = obfDraft == ObfProfile.NONE || ObfProfile.isValidKey(keyDraft) ||
-        (keyDraft.isBlank() && isConnected && syncOn)
+    // Ключ валиден для применения: обфускация выкл, 64 hex, либо пусто — тогда apply
+    // оставит сохранённый ключ, а если его нет, сгенерирует новый локально.
+    val keyOkForApply = obfDraft == ObfProfile.NONE || keyDraft.isBlank() ||
+        ObfProfile.isValidKey(keyDraft)
 
     // Плавающий «Применить» виден только когда есть что применять: фиксирует весь черновик
     // одним рестартом и уходит назад в хаб. Невалидный/занятый стейт — FAB просто прячется
@@ -393,7 +386,8 @@ fun ServerManagementScreen(
                             }
                         }
                         SettingsRowDivider()
-                        // obf-ключ (черновик) + регенерация на сервере (живая SSH-операция).
+                        // obf-ключ (черновик); регенерация лишь заполняет черновик —
+                        // рестарт случится по общей кнопке «Применить».
                         if (obfDraft != ObfProfile.NONE) {
                             SettingsFieldSlot {
                                 OutlinedTextField(
@@ -403,8 +397,7 @@ fun ServerManagementScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     readOnly = privacyMode,
                                     singleLine = true,
-                                    isError = (keyDraft.isNotBlank() && !ObfProfile.isValidKey(keyDraft)) ||
-                                        (keyDraft.isBlank() && !(isConnected && syncOn)),
+                                    isError = keyDraft.isNotBlank() && !ObfProfile.isValidKey(keyDraft),
                                     trailingIcon = {
                                         if (effServer.obfKey.isNotBlank() && !privacyMode) {
                                             IconButton(onClick = {
@@ -421,14 +414,6 @@ fun ServerManagementScreen(
                                     },
                                     supportingText = {
                                         when {
-                                            keyDraft.isBlank() && !isConnected -> Text(
-                                                stringResource(R.string.obf_key_manual_hint),
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                            keyDraft.isBlank() && !syncOn -> Text(
-                                                stringResource(R.string.obf_key_empty_hint),
-                                                color = MaterialTheme.colorScheme.error
-                                            )
                                             keyDraft.isBlank() -> Text(stringResource(R.string.obf_key_empty_hint))
                                             !ObfProfile.isValidKey(keyDraft) -> Text(
                                                 stringResource(R.string.obf_key_invalid_hint),
@@ -437,22 +422,15 @@ fun ServerManagementScreen(
                                         }
                                     }
                                 )
-                                if (isConnected && !privacyMode) {
+                                if (!privacyMode) {
                                     TextButton(
                                         onClick = {
                                             HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                                            serverViewModel.regenerateObfKey()
+                                            keyDraft = ObfProfile.generateKey()
                                         },
-                                        enabled = !isRegen,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        if (isRegen) {
-                                            CircularWavyProgressIndicator(modifier = Modifier.size(20.dp))
-                                            Spacer(Modifier.width(8.dp))
-                                            Text(stringResource(R.string.obf_key_regen_in_progress))
-                                        } else {
-                                            Text(stringResource(R.string.obf_key_regen))
-                                        }
+                                        Text(stringResource(R.string.obf_key_regen))
                                     }
                                 }
                             }

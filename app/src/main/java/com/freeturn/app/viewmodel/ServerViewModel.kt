@@ -4,15 +4,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freeturn.app.data.AppPreferences
+import com.freeturn.app.data.ObfProfile
 import com.freeturn.app.data.ServerOpts
 import com.freeturn.app.data.SshConfig
 import com.freeturn.app.domain.ProxyOrchestrator
 import com.freeturn.app.domain.SshRepository
 import com.freeturn.app.ui.HapticUtil
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -39,9 +38,6 @@ class ServerViewModel(
 
     val sshConfig: StateFlow<SshConfig> = prefs.sshConfigFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SshConfig())
-
-    private val _isRegeneratingObfKey = MutableStateFlow(false)
-    val isRegeneratingObfKey: StateFlow<Boolean> = _isRegeneratingObfKey.asStateFlow()
 
     /**
      * Сводный статус АКТИВНОГО сервера для хаба — одна модель из 2 потоков. Server-контекст
@@ -97,13 +93,8 @@ class ServerViewModel(
         viewModelScope.launch {
             val outcome = sshRepository.installServer()
             if (outcome is com.freeturn.app.domain.InstallOutcome.Success) {
-                if (outcome.stage == "downloaded") {
-                    if (prefs.serverOptsFlow.first().obfKey.isBlank()) {
-                        val key = sshRepository.generateObfKey()
-                        if (!key.isNullOrBlank()) {
-                            prefs.updateActiveServer { it.copy(opts = it.opts.copy(obfKey = key)) }
-                        }
-                    }
+                if (outcome.stage == "downloaded" && prefs.serverOptsFlow.first().obfKey.isBlank()) {
+                    prefs.updateActiveServer { it.copy(opts = it.opts.copy(obfKey = ObfProfile.generateKey())) }
                 }
                 if (outcome.needsRestart) {
                     startServer()
@@ -141,20 +132,4 @@ class ServerViewModel(
     }
 
     fun clearSshLog() = sshRepository.clearSshLog()
-
-    fun regenerateObfKey() {
-        viewModelScope.launch {
-            if (_isRegeneratingObfKey.value) return@launch
-            _isRegeneratingObfKey.value = true
-            try {
-                val key = sshRepository.generateObfKey() ?: return@launch
-                prefs.updateActiveServer { it.copy(opts = it.opts.copy(obfKey = key)) }
-
-                if (prefs.clientConfigFlow.first().syncServerSwitches) orchestrator.restartServerIfRunning()
-                orchestrator.restartProxyIfRunning()
-            } finally {
-                _isRegeneratingObfKey.value = false
-            }
-        }
-    }
 }

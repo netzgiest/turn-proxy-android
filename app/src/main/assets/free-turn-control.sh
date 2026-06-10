@@ -592,17 +592,6 @@ cmd_logs() {
     trap - EXIT
 }
 
-cmd_gen_obf_key() {
-    local bin key
-    bin=$(binpath)
-    [ -x "$bin" ] || die "server binary not installed"
-    key=$("$bin" -gen-obf-key 2>/dev/null | grep -oE '[0-9a-fA-F]{64}' | head -n1)
-    [ -n "$key" ] || die "binary did not return obf-key"
-    emit OBFKEY "$key"
-    echo "RESULT=ok"
-    trap - EXIT
-}
-
 main() {
     [ $# -ge 1 ] || die "no subcommand"
     local sub=$1
@@ -613,7 +602,6 @@ main() {
         start)        cmd_start "$@" ;;
         stop)         cmd_stop ;;
         logs)         cmd_logs "$@" ;;
-        gen-obf-key)  cmd_gen_obf_key ;;
         *) die "unknown subcommand: $sub" ;;
     esac
 }

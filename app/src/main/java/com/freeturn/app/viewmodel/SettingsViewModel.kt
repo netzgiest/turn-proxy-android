@@ -228,7 +228,7 @@ class SettingsViewModel(
      * Атомарно применяет конфиг сервера (proxy-адреса + tcp-проброс + профиль обфускации
      * + obf-ключ) одной транзакцией и перезапускает сервер/прокси РОВНО один раз — для
      * apply-модели «Настроек сервера» (натыкали черновик → Применить). Если включается
-     * обфускация без ключа в sync-режиме, ключ генерируется на сервере (SSH, вне mutex).
+     * обфускация без ключа, ключ генерируется локально.
      */
     fun applyServerConfig(
         listen: String,
@@ -240,12 +240,12 @@ class SettingsViewModel(
         viewModelScope.launch {
             val sync = prefs.clientConfigFlow.first().syncServerSwitches
             val trimmedKey = obfKey.trim()
-            val generatedKey: String? =
-                if (obfProfile != ObfProfile.NONE && trimmedKey.isBlank() && sync)
-                    sshRepository.generateObfKey()?.takeIf { it.isNotBlank() }
-                else null
             val changed = prefs.updateActiveServer { s ->
-                val effKey = trimmedKey.ifBlank { generatedKey ?: s.opts.obfKey }
+                val effKey = trimmedKey.ifBlank {
+                    s.opts.obfKey.ifBlank {
+                        if (obfProfile != ObfProfile.NONE) ObfProfile.generateKey() else ""
+                    }
+                }
                 s.copy(
                     proxyListen = listen,
                     proxyConnect = connect,
@@ -263,8 +263,8 @@ class SettingsViewModel(
     /**
      * Apply-модель «Настроек сервера» для НЕактивного сервера (sync OFF): серверные
      * параметры тут клиент-локальны, поэтому пишем только снимок сервера по id —
-     * рантайм (SSH/прокси активного сервера) не трогаем. Без живого SSH obf-ключ
-     * на сервере не генерим: пустой остаётся пустым (клиент стартует как есть).
+     * рантайм (SSH/прокси активного сервера) не трогаем. Пустой obf-ключ при
+     * включённой обфускации генерируется локально.
      */
     fun updateServerConfig(
         id: String,
@@ -276,7 +276,11 @@ class SettingsViewModel(
     ) {
         viewModelScope.launch {
             prefs.updateServer(id) { target ->
-                val effKey = obfKey.trim().ifBlank { target.opts.obfKey }
+                val effKey = obfKey.trim().ifBlank {
+                    target.opts.obfKey.ifBlank {
+                        if (obfProfile != ObfProfile.NONE) ObfProfile.generateKey() else ""
+                    }
+                }
                 target.copy(
                     proxyListen = listen,
                     proxyConnect = connect,
