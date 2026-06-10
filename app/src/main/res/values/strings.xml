@@ -7,6 +7,9 @@
     <string name="proxy_active">Прокси активен</string>
     <string name="proxy_connecting">Подключение…</string>
     <string name="proxy_press_to_start">Нажмите для запуска</string>
+    <string name="home_empty_title">Нет серверов</string>
+    <string name="home_empty_desc">Добавьте сервер, чтобы запустить прокси</string>
+    <string name="home_add_server">Добавить сервер</string>
     <string name="proxy_captcha_required">Требуется прохождение капчи</string>
     <string name="tcp">TCP</string>
     <string name="udp">UDP</string>

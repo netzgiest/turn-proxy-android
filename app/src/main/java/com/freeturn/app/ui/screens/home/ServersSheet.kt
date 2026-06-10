@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import com.freeturn.app.R
 import com.freeturn.app.data.ServersSnapshot
 import com.freeturn.app.data.Provider
-import com.freeturn.app.ui.components.EmptyServersState
 import com.freeturn.app.ui.components.ServerRow
 import com.freeturn.app.ui.components.settingsItemShape
 import com.freeturn.app.ui.util.redact
@@ -78,11 +77,9 @@ internal fun ServersSheetContent(
                 .padding(horizontal = 24.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val serverName = when {
-                active != null -> active.name
-                snapshot.loaded -> stringResource(R.string.server_unsaved_label)
-                else -> ""
-            }
+            // Серверы есть всегда (без них HomeScreen sheet не показывает), но активный
+            // может быть не выбран — тогда конфиг рантайма не привязан к серверу.
+            val serverName = active?.name ?: stringResource(R.string.server_unsaved_label)
             TooltipBox(
                 positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                 tooltip = { PlainTooltip { Text(serverName) } },
@@ -126,54 +123,43 @@ internal fun ServersSheetContent(
 
         Spacer(Modifier.height(20.dp))
 
-        if (!snapshot.loaded) {
-            // Снимок ещё грузится - пустой вес-плейсхолдер, без мигания empty-state.
-            Spacer(Modifier.weight(1f))
-        } else if (snapshot.list.isEmpty()) {
-            EmptyServersState(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            )
-        } else {
-            Text(
-                stringResource(R.string.servers_sheet_title),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 24.dp, end = 16.dp, bottom = 8.dp)
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                itemsIndexed(snapshot.list, key = { _, p -> p.id }) { index, p ->
-                    val isActive = snapshot.activeId == p.id
-                    val sub = listOfNotNull(
-                        p.client.serverAddress.takeIf { it.isNotBlank() }?.redact(privacyMode),
-                        p.ssh.ip.takeIf { it.isNotBlank() }?.let { "SSH ${it.redact(privacyMode)}" }
-                    ).joinToString(" · ").ifBlank { "—" }
-                    ServerRow(
-                        name = p.name,
-                        subtitle = sub,
-                        isActive = isActive,
-                        shape = settingsItemShape(index, snapshot.list.size),
-                        // Лист сам на surfaceContainerLow — строкам нужен контраст повыше.
-                        inactiveContainer = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        onClick = { if (!isActive) onApplyServer(p.id) },
-                        trailing = {
-                            IconButton(onClick = { onOpenServerSettings(p.id) }) {
-                                Icon(
-                                    painterResource(R.drawable.settings_outlined_24px),
-                                    contentDescription = stringResource(R.string.nav_settings),
-                                    tint = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+        Text(
+            stringResource(R.string.servers_sheet_title),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(start = 24.dp, end = 16.dp, bottom = 8.dp)
+        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            itemsIndexed(snapshot.list, key = { _, p -> p.id }) { index, p ->
+                val isActive = snapshot.activeId == p.id
+                val sub = listOfNotNull(
+                    p.client.serverAddress.takeIf { it.isNotBlank() }?.redact(privacyMode),
+                    p.ssh.ip.takeIf { it.isNotBlank() }?.let { "SSH ${it.redact(privacyMode)}" }
+                ).joinToString(" · ").ifBlank { "—" }
+                ServerRow(
+                    name = p.name,
+                    subtitle = sub,
+                    isActive = isActive,
+                    shape = settingsItemShape(index, snapshot.list.size),
+                    // Лист сам на surfaceContainerLow — строкам нужен контраст повыше.
+                    inactiveContainer = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    onClick = { if (!isActive) onApplyServer(p.id) },
+                    trailing = {
+                        IconButton(onClick = { onOpenServerSettings(p.id) }) {
+                            Icon(
+                                painterResource(R.drawable.settings_outlined_24px),
+                                contentDescription = stringResource(R.string.nav_settings),
+                                tint = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    )
-                }
+                    }
+                )
             }
         }
     }

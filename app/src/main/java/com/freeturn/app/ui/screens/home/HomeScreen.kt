@@ -21,6 +21,7 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,14 +55,16 @@ import kotlinx.coroutines.launch
  * Главный экран — тонкий слой над ViewModel: собирает состояния, держит
  * системные ланчеры (VPN-согласие, стартовые разрешения) и раскладывает
  * чистые компоненты: [ConnectionHero], [SplitTunnelChip], [ServersSheetContent],
- * [UpdateDialogs].
+ * [UpdateDialogs]. Без единого сервера лист и тоггл скрыты — показывается
+ * [HomeEmptyState] с CTA добавления.
  */
 @Composable
 fun HomeScreen(
     settingsViewModel: SettingsViewModel,
     proxyViewModel: ProxyViewModel,
     onOpenLogs: () -> Unit,
-    onOpenServerSettings: (String) -> Unit
+    onOpenServerSettings: (String) -> Unit,
+    onAddServer: () -> Unit
 ) {
     val context = LocalContext.current
     val proxyState by proxyViewModel.proxyState.collectAsStateWithLifecycle()
@@ -109,91 +112,117 @@ fun HomeScreen(
     }
 
     val sheetColor = MaterialTheme.colorScheme.surfaceContainerLow
-    BottomSheetScaffold(
-        scaffoldState = sheetScaffoldState,
-        sheetPeekHeight = 112.dp,
-        sheetContainerColor = sheetColor,
-        sheetContent = {
-            ServersSheetContent(
-                snapshot = serversSnapshot,
-                privacyMode = privacyMode,
-                onApplyServer = { id ->
-                    settingsViewModel.applyServer(id)
-                    scope.launch { sheetScaffoldState.bottomSheetState.partialExpand() }
-                },
-                onOpenServerSettings = { id ->
-                    // Сворачиваем лист перед уходом в хаб — вернувшись, юзер видит главный
-                    // экран, а не распахнутый список.
-                    scope.launch { sheetScaffoldState.bottomSheetState.partialExpand() }
-                    onOpenServerSettings(id)
-                }
-            )
-        },
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.turn_proxy_title)) },
-                actions = {
-                    // Вход в экран логов — при «Показывать логи» И включённом nerdMode.
-                    // Обе галки обязаны быть видимыми одновременно: иначе выключение
-                    // nerdMode оставляло бы кнопку без доступного тоггла её выключить.
-                    if (clientConfig.logsEnabled && nerdMode) {
-                        IconButton(onClick = {
-                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                            onOpenLogs()
-                        }) {
-                            Icon(
-                                painterResource(R.drawable.terminal_24px),
-                                contentDescription = stringResource(R.string.open_logs)
-                            )
-                        }
+    val topBar: @Composable () -> Unit = {
+        TopAppBar(
+            title = { Text(stringResource(R.string.turn_proxy_title)) },
+            actions = {
+                // Вход в экран логов — при «Показывать логи» И включённом nerdMode.
+                // Обе галки обязаны быть видимыми одновременно: иначе выключение
+                // nerdMode оставляло бы кнопку без доступного тоггла её выключить.
+                if (clientConfig.logsEnabled && nerdMode) {
+                    IconButton(onClick = {
+                        HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                        onOpenLogs()
+                    }) {
+                        Icon(
+                            painterResource(R.drawable.terminal_24px),
+                            contentDescription = stringResource(R.string.open_logs)
+                        )
                     }
                 }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .widthIn(max = 840.dp)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                ConnectionHero(
-                    state = proxyState,
-                    uptimeText = uptimeText,
-                    onToggle = {
-                        when (proxyState) {
-                            is ProxyState.Idle, is ProxyState.Error -> {
-                                HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
-                                startProxyWithTunnel()
-                            }
-                            is ProxyState.Running, is ProxyState.Connecting, is ProxyState.Starting -> {
-                                HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_OFF)
-                                proxyViewModel.stopProxy()
-                            }
-                            else -> {}
-                        }
-                    }
+            }
+        )
+    }
+
+    // Без серверов листу нечего показывать и запускать нечего: вместо
+    // BottomSheetScaffold — обычный Scaffold с приглашением добавить сервер.
+    // Пока снимок не загружен — пустое тело, чтобы ни sheet, ни empty-state
+    // не мигали на старте.
+    when {
+        !serversSnapshot.loaded ->
+            Scaffold(topBar = topBar, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+                Box(Modifier.fillMaxSize().padding(padding))
+            }
+
+        serversSnapshot.list.isEmpty() ->
+            Scaffold(topBar = topBar, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+                HomeEmptyState(
+                    onAddServer = {
+                        HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                        onAddServer()
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
                 )
             }
 
-            // Ссылка-индикатор split-tunneling прямо над свёрнутым листом сервера.
-            // Только в WG-режиме: без конфига WireGuard (proxy-режим) сплит не работает.
-            if (clientConfig.wireGuardActive) {
-                SplitTunnelChip(
-                    splitActive = clientConfig.splitTunnelMode != SplitTunnelMode.ALL,
-                    onClick = {
-                        HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                        showSplitSheet.value = true
+        else -> BottomSheetScaffold(
+            scaffoldState = sheetScaffoldState,
+            sheetPeekHeight = 112.dp,
+            sheetContainerColor = sheetColor,
+            sheetContent = {
+                ServersSheetContent(
+                    snapshot = serversSnapshot,
+                    privacyMode = privacyMode,
+                    onApplyServer = { id ->
+                        settingsViewModel.applyServer(id)
+                        scope.launch { sheetScaffoldState.bottomSheetState.partialExpand() }
                     },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 12.dp)
+                    onOpenServerSettings = { id ->
+                        // Сворачиваем лист перед уходом в хаб — вернувшись, юзер видит главный
+                        // экран, а не распахнутый список.
+                        scope.launch { sheetScaffoldState.bottomSheetState.partialExpand() }
+                        onOpenServerSettings(id)
+                    }
                 )
+            },
+            topBar = topBar,
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { padding ->
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .widthIn(max = 840.dp)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    ConnectionHero(
+                        state = proxyState,
+                        uptimeText = uptimeText,
+                        onToggle = {
+                            when (proxyState) {
+                                is ProxyState.Idle, is ProxyState.Error -> {
+                                    HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
+                                    startProxyWithTunnel()
+                                }
+                                is ProxyState.Running, is ProxyState.Connecting, is ProxyState.Starting -> {
+                                    HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_OFF)
+                                    proxyViewModel.stopProxy()
+                                }
+                                else -> {}
+                            }
+                        }
+                    )
+                }
+
+                // Ссылка-индикатор split-tunneling прямо над свёрнутым листом сервера.
+                // Только в WG-режиме: без конфига WireGuard (proxy-режим) сплит не работает.
+                if (clientConfig.wireGuardActive) {
+                    SplitTunnelChip(
+                        splitActive = clientConfig.splitTunnelMode != SplitTunnelMode.ALL,
+                        onClick = {
+                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                            showSplitSheet.value = true
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp)
+                    )
+                }
             }
         }
     }

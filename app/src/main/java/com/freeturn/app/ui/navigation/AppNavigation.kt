@@ -246,7 +246,9 @@ private fun AppNavHost(
                     onOpenLogs = { navController.navigate(Routes.LOGS) },
                     // Хаб сервера живёт в графе настроек — нижний бар подсветит «Настройки»,
                     // системный «назад» вернёт на главную.
-                    onOpenServerSettings = { id -> navController.navigate(Routes.serverDetail(id)) }
+                    onOpenServerSettings = { id -> navController.navigate(Routes.serverDetail(id)) },
+                    // CTA пустого состояния: список серверов (там же появится добавление).
+                    onAddServer = { navController.navigate(Routes.SERVERS_LIST) }
                 )
             }
             composable(Routes.LOGS) {
