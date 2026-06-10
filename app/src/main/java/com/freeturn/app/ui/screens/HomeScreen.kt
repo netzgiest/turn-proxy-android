@@ -101,13 +101,15 @@ import androidx.core.net.toUri
 @Composable
 fun HomeScreen(
     settingsViewModel: SettingsViewModel,
-    proxyViewModel: ProxyViewModel
+    proxyViewModel: ProxyViewModel,
+    onOpenLogs: () -> Unit
 ) {
     val context = LocalContext.current
     val proxyState by proxyViewModel.proxyState.collectAsStateWithLifecycle()
     val connectedSince by proxyViewModel.connectedSince.collectAsStateWithLifecycle()
     val uptimeText = rememberProxyUptime(connectedSince)
     val clientConfig by settingsViewModel.clientConfig.collectAsStateWithLifecycle()
+    val nerdMode by settingsViewModel.nerdMode.collectAsStateWithLifecycle()
 
     // Запрос разрешений при первом открытии главного экрана
     val batteryOptLauncher = rememberLauncherForActivityResult(
@@ -209,6 +211,20 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.turn_proxy_title)) },
                 actions = {
+                    // Вход в экран логов — при «Показывать логи» И включённом nerdMode.
+                    // Обе галки обязаны быть видимыми одновременно: иначе выключение
+                    // nerdMode оставляло бы кнопку без доступного тоггла её выключить.
+                    if (clientConfig.logsEnabled && nerdMode) {
+                        IconButton(onClick = {
+                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                            onOpenLogs()
+                        }) {
+                            Icon(
+                                painterResource(R.drawable.terminal_24px),
+                                contentDescription = stringResource(R.string.open_logs)
+                            )
+                        }
+                    }
                     IconButton(onClick = {
                         HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
                         showBottomSheet.value = true

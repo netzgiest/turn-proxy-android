@@ -45,10 +45,12 @@ import androidx.navigation.compose.rememberNavController
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.ui.theme.LocalReducedMotion
 import com.freeturn.app.ui.screens.CaptchaWebViewDialog
+import com.freeturn.app.ui.screens.AdvancedScreen
 import com.freeturn.app.ui.screens.ClientSetupScreen
 import com.freeturn.app.ui.screens.ConnectionModeScreen
 import com.freeturn.app.ui.screens.HomeScreen
 import com.freeturn.app.ui.screens.LogsScreen
+import com.freeturn.app.ui.screens.NerdScreen
 import com.freeturn.app.ui.screens.OnboardingScreen
 import com.freeturn.app.ui.screens.ServerDetailScreen
 import com.freeturn.app.ui.screens.ServerManagementScreen
@@ -71,7 +73,6 @@ object Routes {
     // Графы вкладок нижнего меню. У каждой вкладки свой back-stack: бар виден на всех
     // уровнях вложенности, повторный тап по активной вкладке возвращает в её корень.
     const val HOME_GRAPH = "home_graph"
-    const val LOGS_GRAPH = "logs_graph"
     const val SETTINGS_GRAPH = "settings_graph"
 
     const val HOME = "home"
@@ -79,16 +80,19 @@ object Routes {
 
     // Settings-флоу: Настройки → Серверы → [сервер] → подключение / сервер
     const val SETTINGS = "settings"
+    const val ADVANCED = "advanced"
     const val SERVERS_LIST = "servers_list"
     const val SERVER_DETAIL = "server_detail/{profileId}"
     const val CONNECTION_MODE = "connection_mode/{profileId}"
     const val CLIENT_SETUP = "client_setup/{profileId}"
     const val SERVER_MANAGEMENT = "server_management/{profileId}"
+    const val NERD_INFO = "nerd_info/{profileId}"
 
     fun serverDetail(id: String) = "server_detail/$id"
     fun connectionMode(id: String) = "connection_mode/$id"
     fun clientSetup(id: String) = "client_setup/$id"
     fun serverManagement(id: String) = "server_management/$id"
+    fun nerdInfo(id: String) = "nerd_info/$id"
 }
 
 // MD3 emphasized-кривая + длительности навигационных переходов (единый источник).
@@ -299,18 +303,16 @@ private fun AppNavHost(
             )
         }
 
-        // Вкладка «Главная»
+        // Вкладка «Главная». Вход в экран логов живёт в шапке Home (кнопка видна при
+        // включённом «Показывать логи») и открывается в стеке этой же вкладки.
         navigation(startDestination = Routes.HOME, route = Routes.HOME_GRAPH) {
             composable(Routes.HOME) {
                 HomeScreen(
                     settingsViewModel = settingsViewModel,
-                    proxyViewModel = proxyViewModel
+                    proxyViewModel = proxyViewModel,
+                    onOpenLogs = { navController.navigate(Routes.LOGS) }
                 )
             }
-        }
-
-        // Вкладка «Логи»
-        navigation(startDestination = Routes.LOGS, route = Routes.LOGS_GRAPH) {
             composable(Routes.LOGS) {
                 LogsScreen(proxyViewModel = proxyViewModel)
             }
@@ -319,7 +321,17 @@ private fun AppNavHost(
         // Вкладка «Настройки»: Настройки → Серверы → [сервер] → подключение/режим/сервер → SSH
         navigation(startDestination = Routes.SETTINGS, route = Routes.SETTINGS_GRAPH) {
             composable(Routes.SETTINGS) {
-                SettingsScreen(onOpenServers = { navController.navigate(Routes.SERVERS_LIST) })
+                SettingsScreen(
+                    onOpenServers = { navController.navigate(Routes.SERVERS_LIST) },
+                    onOpenAdvanced = { navController.navigate(Routes.ADVANCED) }
+                )
+            }
+
+            composable(Routes.ADVANCED) {
+                AdvancedScreen(
+                    settingsViewModel = settingsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
             }
 
             composable(Routes.SERVERS_LIST) {
@@ -339,7 +351,19 @@ private fun AppNavHost(
                     onBack = { navController.popBackStack() },
                     onOpenConnection = { navController.navigate(Routes.clientSetup(id)) },
                     onOpenConnectionMode = { navController.navigate(Routes.connectionMode(id)) },
-                    onOpenServerSettings = { navController.navigate(Routes.serverManagement(id)) }
+                    onOpenServerSettings = { navController.navigate(Routes.serverManagement(id)) },
+                    onOpenNerdInfo = { navController.navigate(Routes.nerdInfo(id)) },
+                    onConfigureSsh = { navController.navigate(Routes.SSH_SETUP) }
+                )
+            }
+
+            composable(Routes.NERD_INFO) { entry ->
+                val id = entry.arguments?.getString("profileId").orEmpty()
+                NerdScreen(
+                    profileId = id,
+                    settingsViewModel = settingsViewModel,
+                    serverViewModel = serverViewModel,
+                    onBack = { navController.popBackStack() }
                 )
             }
 
@@ -381,7 +405,9 @@ private fun AppNavHost(
                     settingsViewModel = settingsViewModel,
                     // Форма поверх настроек сервера — после успеха возвращаемся назад.
                     onConnected = { navController.popBackStack() },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    // Профиль мог быть удалён, пока экран висел в стеке вкладки — выходим назад.
+                    popWhenNoProfiles = true
                 )
             }
         }
@@ -418,6 +444,5 @@ private fun TelegramSubscribeDialog(onSubscribe: () -> Unit, onDismiss: () -> Un
 
 private val navItems = listOf(
     NavItem(Routes.HOME_GRAPH, Routes.HOME, R.string.nav_home, R.drawable.home_24px, R.drawable.home_outlined_24px),
-    NavItem(Routes.LOGS_GRAPH, Routes.LOGS, R.string.logs_title, R.drawable.terminal_24px, R.drawable.terminal_24px),
     NavItem(Routes.SETTINGS_GRAPH, Routes.SETTINGS, R.string.nav_settings, R.drawable.settings_24px, R.drawable.settings_outlined_24px)
 )

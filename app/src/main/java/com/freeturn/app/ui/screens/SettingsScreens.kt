@@ -23,15 +23,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,8 +40,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -50,7 +54,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -65,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -79,15 +83,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.text.font.FontFamily
 import com.freeturn.app.R
+import com.freeturn.app.data.CoreArgs
+import com.freeturn.app.data.ObfProfile
 import com.freeturn.app.data.Profile
+import com.freeturn.app.domain.server.ServerCommand
+import com.freeturn.app.domain.server.ServerOptions
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.ui.components.SectionLabel
 import com.freeturn.app.ui.components.SettingsCard
 import com.freeturn.app.ui.components.SettingsContentMaxWidth
 import com.freeturn.app.ui.components.SettingsEntryRow
-import com.freeturn.app.ui.components.SettingsRowDivider
-import com.freeturn.app.ui.components.SettingsRowIcon
+import com.freeturn.app.ui.components.SettingsGroup
+import com.freeturn.app.ui.components.SettingsGroupItem
+import com.freeturn.app.ui.components.SettingsSwitchRow
+import com.freeturn.app.ui.components.settingsItemShape
 import com.freeturn.app.ui.theme.LocalReducedMotion
 import com.freeturn.app.ui.theme.extendedColorScheme
 import com.freeturn.app.ui.util.hapticClickable
@@ -95,12 +106,14 @@ import com.freeturn.app.viewmodel.ServerHubStatus
 import com.freeturn.app.viewmodel.ServerViewModel
 import com.freeturn.app.viewmodel.SettingsViewModel
 import com.freeturn.app.viewmodel.SshConnectionState
+import com.freeturn.app.viewmodel.serverSettingsAvailable
 
 
 /** Корневой экран настроек (нижнее меню). Пока единственный пункт — «Серверы». */
 @Composable
 fun SettingsScreen(
-    onOpenServers: () -> Unit
+    onOpenServers: () -> Unit,
+    onOpenAdvanced: () -> Unit
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
@@ -125,14 +138,79 @@ fun SettingsScreen(
                 modifier = Modifier
                     .widthIn(max = SettingsContentMaxWidth)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Сегментированная группа (M3 expressive): пункты с микро-зазором,
+                // наружные углы большие. Новые пункты добавляются строкой в группу,
+                // при разрастании — разбиение на группы с SectionLabel.
+                SettingsGroup {
+                    SettingsGroupItem(0, 2) {
+                        SettingsEntryRow(
+                            iconRes = R.drawable.database_24px,
+                            title = stringResource(R.string.settings_servers),
+                            subtitle = stringResource(R.string.settings_servers_desc),
+                            onClick = onOpenServers
+                        )
+                    }
+                    SettingsGroupItem(1, 2) {
+                        SettingsEntryRow(
+                            iconRes = R.drawable.tune_24px,
+                            title = stringResource(R.string.settings_advanced),
+                            subtitle = stringResource(R.string.settings_advanced_desc),
+                            onClick = onOpenAdvanced
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * «Продвинутые» — мастер-свитч «Режим отладки» ([SettingsViewModel.nerdMode]): включает
+ * отладочную информацию в хабе сервера (журнал, подробные логи) и кнопку логов на главном экране.
+ */
+@Composable
+fun AdvancedScreen(
+    settingsViewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
+    val nerdMode by settingsViewModel.nerdMode.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = { Text(stringResource(R.string.settings_advanced)) },
+                navigationIcon = { BackButton(onBack) },
+                scrollBehavior = scrollBehavior
+            )
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = SettingsContentMaxWidth)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 SettingsCard {
-                    SettingsEntryRow(
-                        iconRes = R.drawable.database_24px,
-                        title = stringResource(R.string.settings_servers),
-                        subtitle = stringResource(R.string.settings_servers_desc),
-                        onClick = onOpenServers
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.nerd_mode),
+                        subtitle = stringResource(R.string.nerd_mode_desc),
+                        iconRes = R.drawable.terminal_24px,
+                        checked = nerdMode,
+                        onCheckedChange = { settingsViewModel.setNerdMode(it) }
                     )
                 }
             }
@@ -184,13 +262,13 @@ fun ServersListScreen(
                 val ordered = remember(snapshot.list, snapshot.activeId) {
                     snapshot.list.sortedByDescending { it.id == snapshot.activeId }
                 }
-                SettingsCard {
+                SettingsGroup {
                     ordered.forEachIndexed { index, p ->
-                        if (index > 0) SettingsRowDivider()
                         ServerListRow(
                             profile = p,
                             isActive = snapshot.activeId == p.id,
                             privacyMode = privacyMode,
+                            shape = settingsItemShape(index, ordered.size),
                             onClick = { onOpenServer(p.id) }
                         )
                     }
@@ -205,6 +283,7 @@ private fun ServerListRow(
     profile: Profile,
     isActive: Boolean,
     privacyMode: Boolean,
+    shape: Shape,
     onClick: () -> Unit
 ) {
     // Подзаголовок: адрес сервера + метка «SSH», если сопряжение настроено. Сам SSH-ip
@@ -214,84 +293,69 @@ private fun ServerListRow(
         stringResource(R.string.profile_has_ssh).takeIf { profile.ssh.ip.isNotBlank() }
     ).joinToString(" · ").ifBlank { "—" }
 
-    // «Активный» = выбранный профиль (а не статус SSH-подключения). Озвучиваем для TalkBack.
+    // «Активный» = выбранный профиль (а не статус SSH-подключения). Текстового бейджа нет —
+    // он сжимал заголовок на узких экранах; выбранность несёт тон контейнера
+    // (secondaryContainer, как у selected-элементов M3) + насыщенный аватар.
+    // Для TalkBack статус остаётся в contentDescription.
     val activeBadge = stringResource(R.string.profile_active_badge)
     val rowDesc = if (isActive) "${profile.name}, $activeBadge" else profile.name
 
-    // Круглый аватар вместо Sunny-формы — нейтральнее, не выбивается в плотном списке.
-    // Активный — primaryContainer, остальные — приглушённый surface-контейнер.
-    val iconContainer = if (isActive) MaterialTheme.colorScheme.primaryContainer
+    val container = if (isActive) MaterialTheme.colorScheme.secondaryContainer
+    else MaterialTheme.colorScheme.surfaceContainerLow
+    val titleColor = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer
+    else MaterialTheme.colorScheme.onSurface
+    val subColor = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    val iconContainer = if (isActive) MaterialTheme.colorScheme.primary
     else MaterialTheme.colorScheme.surfaceContainerHighest
-    val iconTint = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer
+    val iconTint = if (isActive) MaterialTheme.colorScheme.onPrimary
     else MaterialTheme.colorScheme.onSurfaceVariant
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .hapticClickable(HapticUtil.Pattern.CLICK, onClick = onClick)
-            .semantics { contentDescription = rowDesc }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Box(
+    Surface(shape = shape, color = container, modifier = Modifier.fillMaxWidth()) {
+        Row(
             modifier = Modifier
-                .size(44.dp)
-                .background(iconContainer, CircleShape),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .hapticClickable(HapticUtil.Pattern.CLICK, onClick = onClick)
+                .semantics { contentDescription = rowDesc }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Icon(
-                painterResource(R.drawable.database_24px),
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(iconContainer, CircleShape),
+                contentAlignment = Alignment.Center
             ) {
+                Icon(
+                    painterResource(R.drawable.database_24px),
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     profile.name,
                     style = MaterialTheme.typography.bodyLarge,
+                    color = titleColor,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    overflow = TextOverflow.Ellipsis
                 )
-                // Тональный бейдж «Активный» вместо зелёного pill — читается как
-                // «выбранный профиль», а не как живой статус подключения.
-                if (isActive) ActiveBadge(activeBadge)
+                Text(
+                    sub,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = subColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Text(
-                sub,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            Icon(
+                painterResource(R.drawable.chevron_right_24px),
+                contentDescription = null,
+                tint = subColor
             )
         }
-        Icon(
-            painterResource(R.drawable.chevron_right_24px),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ActiveBadge(label: String) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            maxLines = 1,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
     }
 }
 
@@ -307,7 +371,9 @@ fun ServerDetailScreen(
     onBack: () -> Unit,
     onOpenConnection: (String) -> Unit,
     onOpenConnectionMode: (String) -> Unit,
-    onOpenServerSettings: (String) -> Unit
+    onOpenServerSettings: (String) -> Unit,
+    onOpenNerdInfo: (String) -> Unit,
+    onConfigureSsh: () -> Unit
 ) {
     val context = LocalContext.current
     val snapshot by settingsViewModel.profilesSnapshot.collectAsStateWithLifecycle()
@@ -315,6 +381,7 @@ fun ServerDetailScreen(
     val sshState by serverViewModel.sshState.collectAsStateWithLifecycle()
     val sshConfig by serverViewModel.sshConfig.collectAsStateWithLifecycle()
     val coreStatus by serverViewModel.hubStatus.collectAsStateWithLifecycle()
+    val nerdMode by settingsViewModel.nerdMode.collectAsStateWithLifecycle()
     val profile = snapshot.list.firstOrNull { it.id == profileId }
     val isActive = snapshot.activeId == profileId
 
@@ -328,19 +395,21 @@ fun ServerDetailScreen(
     // Порядок гарантирует отсутствие мигания: пока снапшот не загружен — skeleton, а не Offline.
     val status: ServerHubStatus = when {
         !snapshot.loaded -> ServerHubStatus.Connecting
-        !isActive -> ServerHubStatus.Offline(
-            serverAddress = profile?.client?.serverAddress?.takeIf { it.isNotBlank() }?.redact(privacyMode),
-            sshIp = profile?.ssh?.ip?.takeIf { it.isNotBlank() }?.redact(privacyMode)
-        )
+        !isActive -> ServerHubStatus.Offline
         profile?.ssh?.ip.isNullOrBlank() -> ServerHubStatus.NotPaired
         else -> coreStatus
     }
     // Вход в «Настройки сервера» доступен только при живом ядре (Online).
-    val connected = status is ServerHubStatus.Online
+    val online = status as? ServerHubStatus.Online
+    val connected = online != null
 
     // Best-effort авто-сопряжение активного сервера при входе (не дублируем на других экранах).
+    // Откладываем старт на длительность nav-перехода: иначе reconnect мгновенно дёргает
+    // sshState→Connecting, и hub-карточка запускает AnimatedContent size-spring + wavy-индикатор
+    // ОДНОВРЕМЕННО со slide-переходом — это и есть пролаг при заходе. После перехода — плавно.
     LaunchedEffect(isActive, sshConfig.ip, sshState) {
         if (isActive && sshConfig.ip.isNotBlank() && sshState is SshConnectionState.Disconnected) {
+            kotlinx.coroutines.delay(350)
             serverViewModel.reconnectSsh()
         }
     }
@@ -377,6 +446,53 @@ fun ServerDetailScreen(
                             )
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            // Управление ядром — только при живом сервере (Online). Пункты
+                            // адаптивны к состоянию: установка/обновление, старт, стоп. Во время
+                            // действия статус уходит в Working → online == null → пункты прячутся.
+                            if (online != null) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(stringResource(
+                                            if (online.installed) R.string.server_update else R.string.server_install
+                                        ))
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                                        serverViewModel.installServer()
+                                    },
+                                    leadingIcon = {
+                                        Icon(painterResource(R.drawable.cloud_download_24px), contentDescription = null)
+                                    }
+                                )
+                                if (online.installed && !online.running) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.start_server)) },
+                                        onClick = {
+                                            showMenu = false
+                                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                                            serverViewModel.startServer()
+                                        },
+                                        leadingIcon = {
+                                            Icon(painterResource(R.drawable.play_arrow_24px), contentDescription = null)
+                                        }
+                                    )
+                                }
+                                if (online.running) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.stop_server)) },
+                                        onClick = {
+                                            showMenu = false
+                                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                                            serverViewModel.stopServer()
+                                        },
+                                        leadingIcon = {
+                                            Icon(painterResource(R.drawable.stop_24px), contentDescription = null)
+                                        }
+                                    )
+                                }
+                                HorizontalDivider()
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.menu_rename_server)) },
                                 onClick = { showMenu = false; showRename = true },
@@ -426,9 +542,11 @@ fun ServerDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (profile != null) {
+                    // SSH не настроен → синхронизировать нечего: тоггл гасим и держим OFF.
+                    val sshConfigured = profile.ssh.ip.isNotBlank()
                     ServerStatusCard(
                         status = status,
-                        privacyMode = privacyMode,
+                        syncOn = sshConfigured && profile.client.syncServerSwitches,
                         onActivate = {
                             HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
                             settingsViewModel.applyProfile(profileId)
@@ -436,15 +554,21 @@ fun ServerDetailScreen(
                         onRetry = {
                             HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
                             serverViewModel.reconnectSsh()
-                        }
+                        },
+                        onConfigureSsh = onConfigureSsh
                     )
 
                     // Мастер-свитч синхронизации — перенесён из «Настроек сервера» в хаб.
+                    // Без подзаголовка: описание раздувало карточку, предупреждение при выкл
+                    // даёт баннер на экране настроек сервера. Без SSH синхронизировать нечего —
+                    // тоггл недоступен и показан выключенным.
                     SettingsCard {
-                        SyncToggleRow(
-                            checked = profile.client.syncServerSwitches,
+                        SettingsSwitchRow(
+                            title = stringResource(R.string.sync_server_switches),
+                            iconRes = R.drawable.cached_24px,
+                            checked = sshConfigured && profile.client.syncServerSwitches,
+                            enabled = sshConfigured,
                             onCheckedChange = { v ->
-                                HapticUtil.perform(context, if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
                                 if (isActive) settingsViewModel.setSyncServerSwitches(v)
                                 else settingsViewModel.updateProfileClient(profileId) { it.copy(syncServerSwitches = v) }
                             }
@@ -453,29 +577,58 @@ fun ServerDetailScreen(
                 }
 
                 SectionLabel(stringResource(R.string.provider_vk_calls))
-                SettingsCard {
-                    SettingsEntryRow(
-                        iconRes = R.drawable.mobile_24px,
-                        title = stringResource(R.string.provider_connection_settings),
-                        subtitle = stringResource(R.string.provider_connection_settings_desc),
-                        onClick = { onOpenConnection(profileId) }
-                    )
-                    SettingsRowDivider()
-                    SettingsEntryRow(
-                        iconRes = R.drawable.wifi_24px,
-                        title = stringResource(R.string.connection_mode_title),
-                        subtitle = stringResource(R.string.provider_connection_mode_desc),
-                        onClick = { onOpenConnectionMode(profileId) }
-                    )
-                    // «Настройки сервера» требуют живого SSH — показываем только при
-                    // успешном подключении (best-effort коннект идёт при входе в хаб).
-                    if (isActive && connected) {
-                        SettingsRowDivider()
+                // «Настройки сервера»: при sync ON правки пушатся на сервер → нужен живой
+                // SSH; при sync OFF клиент-локальны → вход доступен и оффлайн. Правило
+                // общее с ServerManagementScreen — serverSettingsAvailable.
+                val syncOn = profile?.client?.syncServerSwitches == true
+                // Connecting/Working — transient: SSH ещё поднимается. Пункт не должен мигать,
+                // держим его видимым на время подключения (сам экран при входе покажет
+                // дебаунс-карту потери связи, а не пустоту). Прячем только в терминальных
+                // disconnected-состояниях (Failed/NotPaired) при sync ON.
+                val connecting = status is ServerHubStatus.Connecting || status is ServerHubStatus.Working
+                // Без isActive-гейта: неактивный профиль форсит status=Offline → connected/connecting=false,
+                // поэтому serverSettingsAvailable даёт true только при sync OFF (клиент-локальные настройки),
+                // а при sync ON остаётся скрытым (пушить на сервер нечем без живого SSH активного профиля).
+                val showServerSettings = serverSettingsAvailable(connected || connecting, syncOn)
+                val entryCount = if (showServerSettings) 3 else 2
+                SettingsGroup {
+                    SettingsGroupItem(0, entryCount) {
                         SettingsEntryRow(
-                            iconRes = R.drawable.database_24px,
-                            title = stringResource(R.string.provider_server_settings),
-                            subtitle = stringResource(R.string.provider_server_settings_desc),
-                            onClick = { onOpenServerSettings(profileId) }
+                            iconRes = R.drawable.mobile_24px,
+                            title = stringResource(R.string.provider_connection_settings),
+                            subtitle = stringResource(R.string.provider_connection_settings_desc),
+                            onClick = { onOpenConnection(profileId) }
+                        )
+                    }
+                    SettingsGroupItem(1, entryCount) {
+                        SettingsEntryRow(
+                            iconRes = R.drawable.wifi_24px,
+                            title = stringResource(R.string.connection_mode_title),
+                            subtitle = stringResource(R.string.provider_connection_mode_desc),
+                            onClick = { onOpenConnectionMode(profileId) }
+                        )
+                    }
+                    if (showServerSettings) {
+                        SettingsGroupItem(2, entryCount) {
+                            SettingsEntryRow(
+                                iconRes = R.drawable.database_24px,
+                                title = stringResource(R.string.provider_server_settings),
+                                subtitle = stringResource(R.string.provider_server_settings_desc),
+                                onClick = { onOpenServerSettings(profileId) }
+                            )
+                        }
+                    }
+                }
+
+                // «Отладочная информация» — отдельный экран, вход гейтится глобальным
+                // nerdMode (Продвинутые → Режим отладки).
+                if (nerdMode && profile != null) {
+                    SettingsCard {
+                        SettingsEntryRow(
+                            iconRes = R.drawable.terminal_24px,
+                            title = stringResource(R.string.nerd_section_title),
+                            subtitle = stringResource(R.string.nerd_section_desc),
+                            onClick = { onOpenNerdInfo(profileId) }
                         )
                     }
                 }
@@ -542,25 +695,30 @@ fun ServerDetailScreen(
 /**
  * Карточка статуса сервера в хабе. Один источник истины — [ServerHubStatus] (собран в VM).
  * Дизайн: hero-строка (живой индикатор + заголовок фазы) несёт статус ОДИН раз — без
- * дублирующего чипа; детали (SSH, режим, версия) — meta-чипы во [FlowRow], переносятся на
- * узком экране. Тело меняется одним [AnimatedContent] (size-spring, M3 expressive); фазы
- * холодного захода (disconnected/connecting/checking) свёрнуты в Connecting — один переход в Online.
+ * дублирующих тегов (детали ядра живут в «Отладочной информации»). Тело меняется одним
+ * [AnimatedContent] (size-spring, M3 expressive); фазы холодного захода
+ * (disconnected/connecting/checking) свёрнуты в Connecting — один переход в Online.
  */
 @Composable
 private fun ServerStatusCard(
     status: ServerHubStatus,
-    privacyMode: Boolean,
+    syncOn: Boolean,
     onActivate: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onConfigureSsh: () -> Unit
 ) {
     val reducedMotion = LocalReducedMotion.current
+    // Sync OFF — live-фазы ядра (online/connecting/working/failed) нерелевантны: клиент с
+    // сервером не общается. Схлопываем их в нейтральную заглушку. Actionable-состояния
+    // (Offline/NotPaired) остаются — это setup, а не live-статус.
+    val effective = if (!syncOn && status.isLivePhase()) ServerHubStatus.SyncOff else status
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()
     ) {
         AnimatedContent(
-            targetState = status,
+            targetState = effective,
             // Переход только при смене ФАЗЫ; правки данных внутри Online обновляют тело на месте.
             contentKey = { it.phaseKey() },
             transitionSpec = {
@@ -589,15 +747,15 @@ private fun ServerStatusCard(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 when (s) {
-                    is ServerHubStatus.Online -> OnlineContent(s, privacyMode)
+                    is ServerHubStatus.Online -> OnlineContent(s)
                     ServerHubStatus.Connecting -> BusyContent(stringResource(R.string.pill_connecting))
                     is ServerHubStatus.Working -> BusyContent(s.action)
-                    is ServerHubStatus.Failed -> FailedContent(s.message, onRetry)
-                    is ServerHubStatus.Offline -> OfflineContent(s, onActivate)
-                    ServerHubStatus.NotPaired -> StatusHero(
-                        color = MaterialTheme.extendedColorScheme.warning,
-                        title = stringResource(R.string.pill_not_paired),
-                        subtitle = stringResource(R.string.not_paired_hint)
+                    ServerHubStatus.Failed -> FailedContent(onRetry)
+                    ServerHubStatus.Offline -> OfflineContent(onActivate)
+                    ServerHubStatus.NotPaired -> NotPairedContent(onConfigureSsh)
+                    ServerHubStatus.SyncOff -> StatusHero(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        title = stringResource(R.string.hub_sync_off)
                     )
                 }
             }
@@ -607,12 +765,20 @@ private fun ServerStatusCard(
 
 /** Стабильный ключ фазы — AnimatedContent анимирует только при его смене. */
 private fun ServerHubStatus.phaseKey(): Int = when (this) {
-    is ServerHubStatus.Offline -> 0
+    ServerHubStatus.Offline -> 0
     ServerHubStatus.NotPaired -> 1
     ServerHubStatus.Connecting -> 2
     is ServerHubStatus.Working -> 3
     is ServerHubStatus.Online -> 4
-    is ServerHubStatus.Failed -> 5
+    ServerHubStatus.Failed -> 5
+    ServerHubStatus.SyncOff -> 6
+}
+
+/** Live-фазы зависят от живого SSH/ядра — при sync OFF схлопываются в [ServerHubStatus.SyncOff]. */
+private fun ServerHubStatus.isLivePhase(): Boolean = when (this) {
+    is ServerHubStatus.Online, ServerHubStatus.Connecting,
+    is ServerHubStatus.Working, ServerHubStatus.Failed -> true
+    else -> false
 }
 
 /**
@@ -677,20 +843,6 @@ private fun StatusIndicator(color: Color, pulsing: Boolean) {
     }
 }
 
-/** Компактный meta-чип детали (SSH/режим/версия). Переносится во FlowRow на узком экране. */
-@Composable
-private fun MetaChip(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelMedium,
-            color = color,
-            maxLines = 1,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-        )
-    }
-}
-
 /** Busy-фаза (подключение/серверное действие): hero с пульсом + тонкий wavy-индикатор. */
 @Composable
 private fun BusyContent(title: String) {
@@ -703,12 +855,12 @@ private fun BusyContent(title: String) {
 }
 
 /**
- * Живое ядро: hero несёт главный статус ОДИН раз (работает/остановлен/не установлено),
- * детали — meta-чипы во [FlowRow] (SSH, режим, обфускация, версия, стадия установки). Чипы
- * переносятся на узком экране, ничего не сплющивается.
+ * Живое ядро: hero несёт главный статус ОДИН раз (работает/остановлен/не установлено).
+ * Детальные теги (SSH, режим, обфускация, версия) тут не дублируем — они живут в
+ * «Отладочной информации» (NerdScreen → «Состояние ядра»).
  */
 @Composable
-private fun OnlineContent(status: ServerHubStatus.Online, privacyMode: Boolean) {
+private fun OnlineContent(status: ServerHubStatus.Online) {
     val ext = MaterialTheme.extendedColorScheme
     val (color, title) = when {
         !status.installed -> ext.warning to stringResource(R.string.hub_not_installed)
@@ -716,92 +868,404 @@ private fun OnlineContent(status: ServerHubStatus.Online, privacyMode: Boolean) 
         else -> MaterialTheme.colorScheme.onSurfaceVariant to stringResource(R.string.hub_server_stopped)
     }
     StatusHero(color = color, title = title)
-
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        status.sshIp.redact(privacyMode).takeIf { it.isNotBlank() }?.let {
-            MetaChip("SSH · $it", color = ext.info)
-        }
-        if (status.running) {
-            MetaChip(if (status.tcpMode == true) stringResource(R.string.tcp) else stringResource(R.string.udp))
-            if (status.obfProfile == "rtpopus") MetaChip(stringResource(R.string.obf_rtpopus))
-        }
-        if (status.installed && !status.version.isNullOrBlank()) {
-            MetaChip("v${status.version}")
-        }
-        status.installStage?.let { stage ->
-            val label = when (stage) {
-                "cached" -> stringResource(R.string.server_install_cached)
-                "downloaded" -> stringResource(R.string.server_install_downloaded)
-                else -> stage
-            }
-            MetaChip(label, color = ext.info)
-        }
-    }
 }
 
-/** Ошибка подключения/команды — hero + причина + «Переподключиться». */
+/**
+ * Ошибка подключения/команды — hero + «Переподключиться». Конкретную причину НЕ показываем:
+ * это внутренняя java/SSH-ошибка, а не серверная — юзеру бесполезна.
+ */
 @Composable
-private fun FailedContent(message: String?, onRetry: () -> Unit) {
+private fun FailedContent(onRetry: () -> Unit) {
     StatusHero(
         color = MaterialTheme.colorScheme.error,
-        title = stringResource(R.string.hub_connect_failed),
-        subtitle = message
+        title = stringResource(R.string.hub_connect_failed)
     )
     Button(onClick = onRetry, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
         Text(stringResource(R.string.reconnect))
     }
 }
 
-/** Неактивный профиль — hero + адреса (meta-чипы) + «Сделать активным». */
+/** Неактивный профиль — hero + «Сделать активным». Адреса не дублируем: они в шапке хаба. */
 @Composable
-private fun OfflineContent(status: ServerHubStatus.Offline, onActivate: () -> Unit) {
+private fun OfflineContent(onActivate: () -> Unit) {
     StatusHero(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         title = stringResource(R.string.pill_offline),
         subtitle = stringResource(R.string.server_inactive_desc)
     )
-    if (status.serverAddress != null || status.sshIp != null) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            status.serverAddress?.let { MetaChip(it) }
-            status.sshIp?.let { MetaChip("SSH · $it") }
-        }
-    }
     Button(onClick = onActivate, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
         Text(stringResource(R.string.make_active))
     }
 }
 
-/** Мастер-свитч синхронизации с сервером (в хабе). */
+/** SSH не настроен — hero + «Настроить подключение» (открывает экран SSH-сетапа). */
 @Composable
-private fun SyncToggleRow(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+private fun NotPairedContent(onConfigureSsh: () -> Unit) {
+    StatusHero(
+        color = MaterialTheme.extendedColorScheme.warning,
+        title = stringResource(R.string.pill_not_paired),
+        subtitle = stringResource(R.string.not_paired_hint)
+    )
+    Button(onClick = onConfigureSsh, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Icon(painterResource(R.drawable.host_24px), contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.configure_ssh))
+    }
+}
+
+/** Тег релиза приходит и как "1.0.3", и как "v1.0.3" — нормализуем без "vv". */
+private fun versionLabel(version: String): String = "v${version.removePrefix("v")}"
+
+/**
+ * «Отладочная информация» — отдельный экран (вход из хаба, гейт по nerdMode): отладочные
+ * per-profile флаги (подробные логи, показ логов) + состояние ядра + журнал сервера
+ * и SSH-лог. Потоки логов собираем только здесь — хаб на них не подписан.
+ */
+@Composable
+fun NerdScreen(
+    profileId: String,
+    settingsViewModel: SettingsViewModel,
+    serverViewModel: ServerViewModel,
+    onBack: () -> Unit
 ) {
+    val snapshot by settingsViewModel.profilesSnapshot.collectAsStateWithLifecycle()
+    val privacyMode by settingsViewModel.privacyMode.collectAsStateWithLifecycle()
+    val coreStatus by serverViewModel.hubStatus.collectAsStateWithLifecycle()
+    val profile = snapshot.list.firstOrNull { it.id == profileId }
+    val isActive = snapshot.activeId == profileId
+
+    // Профиль удалён — выходим назад (как в хабе).
+    if (snapshot.loaded && profile == null) {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
+
+    // hubStatus принадлежит активному серверу — для неактивного живого статуса нет.
+    val online = if (isActive) coreStatus as? ServerHubStatus.Online else null
+
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = { Text(stringResource(R.string.nerd_section_title)) },
+                navigationIcon = { BackButton(onBack) },
+                scrollBehavior = scrollBehavior
+            )
+        },
+        // Экран всегда внутри NavigationSuite — нижний бар сам держит навбар-инсет.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = SettingsContentMaxWidth)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (profile != null) {
+                    NerdContent(
+                        profile = profile,
+                        online = online,
+                        privacyMode = privacyMode,
+                        settingsViewModel = settingsViewModel,
+                        serverViewModel = serverViewModel
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NerdContent(
+    profile: Profile,
+    online: ServerHubStatus.Online?,
+    privacyMode: Boolean,
+    settingsViewModel: SettingsViewModel,
+    serverViewModel: ServerViewModel
+) {
+    val context = LocalContext.current
+    val profileId = profile.id
+    val client = profile.client
+    val sshLog by serverViewModel.sshLog.collectAsStateWithLifecycle()
+    val journalLoading by serverViewModel.journalLoading.collectAsStateWithLifecycle()
+
+    // Per-profile отладочные флаги. updateProfileClient разводит active/inactive и
+    // применяет logsEnabled живьём — отдельные VM-сеттеры не нужны.
+    SettingsGroup {
+        SettingsGroupItem(0, 2) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.debug_mode),
+                subtitle = stringResource(R.string.debug_mode_desc),
+                checked = client.debugMode,
+                onCheckedChange = { v ->
+                    settingsViewModel.updateProfileClient(profileId) { it.copy(debugMode = v) }
+                }
+            )
+        }
+        SettingsGroupItem(1, 2) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.logs_enabled),
+                subtitle = stringResource(R.string.logs_enabled_desc),
+                checked = client.logsEnabled,
+                onCheckedChange = { v ->
+                    settingsViewModel.updateProfileClient(profileId) { it.copy(logsEnabled = v) }
+                }
+            )
+        }
+    }
+
+    // Живое состояние ядра — только при живом SSH (online != null).
+    if (online != null) CoreStateCard(online, privacyMode)
+
+    // Параметры запуска реконструируются из конфига — видны всегда, даже оффлайн.
+    LaunchParamsCard(profile, privacyMode)
+
+    // Единый SSH-лог: копит весь вывод команд (включая ошибки сопряжения и server.log,
+    // который тянется кнопкой ниже). Показываем при живом SSH (нужна кнопка журнала)
+    // либо если в логе уже что-то есть.
+    if (online != null || sshLog.isNotEmpty()) {
+        SshLogCard(
+            lines = sshLog,
+            canFetchJournal = online != null,
+            journalLoading = journalLoading,
+            onFetchJournal = {
+                HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                serverViewModel.fetchServerLogs()
+            },
+            onClear = {
+                HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                serverViewModel.clearSshLog()
+            }
+        )
+    }
+}
+
+/** Сырое состояние ядра: подписанные строки «ключ — значение» вместо безымянных чипов. */
+@Composable
+private fun CoreStateCard(online: ServerHubStatus.Online, privacyMode: Boolean) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(stringResource(R.string.nerd_core_state), style = MaterialTheme.typography.titleMedium)
+            // Одно логичное состояние: «работает» уже подразумевает «установлено».
+            // Не установлено → остановлен → работает.
+            val stateRes = when {
+                !online.installed -> R.string.nerd_state_not_installed
+                !online.running -> R.string.nerd_state_stopped
+                else -> R.string.nerd_state_running
+            }
+            NerdStateRow(stringResource(R.string.nerd_state_label), stringResource(stateRes))
+            online.version?.takeIf { it.isNotBlank() }?.let {
+                NerdStateRow(stringResource(R.string.nerd_version_label), versionLabel(it), mono = true)
+            }
+            NerdStateRow(stringResource(R.string.profile_has_ssh), online.sshIp.redact(privacyMode), mono = true)
+        }
+    }
+}
+
+@Composable
+private fun NerdStateRow(label: String, value: String, mono: Boolean = false) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsRowIcon(R.drawable.cached_24px)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(stringResource(R.string.sync_server_switches), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                stringResource(R.string.sync_server_switches_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            value,
+            style = if (mono) MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+            else MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+/**
+ * Параметры запуска ядра — реальные argv, которыми стартуют серверный и клиентский
+ * бинарники. Реконструируются из конфига (тот же [CoreArgs.client], что и в движке;
+ * серверный — через [ServerCommand]), поэтому видны всегда, даже без живого SSH.
+ * Секреты (obf-ключ, vk-ссылка, адрес пира/TURN) маскируются под privacyMode.
+ */
+@Composable
+private fun LaunchParamsCard(profile: Profile, privacyMode: Boolean) {
+    val serverCmd = remember(profile, privacyMode) { serverCommandLine(profile, privacyMode) }
+    val clientCmd = remember(profile, privacyMode) { clientCommandLine(profile, privacyMode) }
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(stringResource(R.string.nerd_launch_params), style = MaterialTheme.typography.titleMedium)
+            LaunchParamBlock(stringResource(R.string.nerd_launch_server), serverCmd)
+            LaunchParamBlock(stringResource(R.string.nerd_launch_client), clientCmd)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun LaunchParamBlock(label: String, commandLine: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        LogPane(commandLine)
+    }
+}
+
+/** Флаги клиента (-flag value), значение которых прячем под privacyMode. */
+private val CLIENT_SECRET_FLAGS = setOf("-peer", "-link", "-obf-key", "-turn")
+
+/** Командная строка клиентского ядра (как в движке) с маской секретов. */
+private fun clientCommandLine(profile: Profile, privacy: Boolean): String {
+    val argv = CoreArgs.client(profile.client, profile.server)
+    val sb = StringBuilder("freeturn")
+    var i = 0
+    while (i < argv.size) {
+        val tok = argv[i]
+        sb.append(' ').append(tok)
+        if (tok in CLIENT_SECRET_FLAGS && i + 1 < argv.size) {
+            sb.append(' ').append(argv[i + 1].redact(privacy))
+            i += 2
+        } else {
+            i += 1
+        }
+    }
+    return sb.toString()
+}
+
+/** Командная строка серверного ядра (как уходит по SSH в free-turn-control.sh). */
+private fun serverCommandLine(profile: Profile, privacy: Boolean): String {
+    val opts = ServerOptions(
+        listen = profile.proxyListen,
+        connect = profile.proxyConnect,
+        tcpMode = profile.client.tcpForward,
+        obfProfile = if (profile.server.obfEnabled) profile.server.obfProfile else ObfProfile.NONE,
+        obfKey = if (profile.server.obfEnabled) profile.server.obfKey else ""
+    )
+    // Серверные флаги в форме --flag=value: маскируем хвост после '=' у секретов.
+    val shown = ServerCommand.Start(opts).toArgv().joinToString(" ") { tok ->
+        val eq = tok.indexOf('=')
+        if (eq > 0 && tok.substring(0, eq) == "--obf-key")
+            tok.substring(0, eq + 1) + tok.substring(eq + 1).redact(privacy)
+        else tok
+    }
+    return "free-turn-control.sh $shown"
+}
+
+/** Тёмная моноширинная вставка лога внутри карточек nerd-секции. */
+@Composable
+private fun LogPane(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant, autoScroll: Boolean = false) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        val scroll = rememberScrollState()
+        if (autoScroll) {
+            LaunchedEffect(text) { scroll.scrollTo(scroll.maxValue) }
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            color = color,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 400.dp)
+                .verticalScroll(scroll)
+                .padding(10.dp)
+        )
+    }
+}
+
+/**
+ * Единый SSH-лог: весь вывод команд сопряжения/управления + server.log (тянется кнопкой
+ * «Журнал сервера») — всё идёт сюда через runCmd. Автопрокрутка к свежим строкам.
+ */
+@Composable
+private fun SshLogCard(
+    lines: List<String>,
+    canFetchJournal: Boolean,
+    journalLoading: Boolean,
+    onFetchJournal: () -> Unit,
+    onClear: () -> Unit
+) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(R.string.ssh_log_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                if (lines.isNotEmpty()) {
+                    IconButton(onClick = onClear) {
+                        Icon(
+                            painterResource(R.drawable.delete_24px),
+                            contentDescription = stringResource(R.string.clear)
+                        )
+                    }
+                }
+                if (canFetchJournal) {
+                    FilledTonalButton(onClick = onFetchJournal, enabled = !journalLoading) {
+                        if (journalLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                painterResource(R.drawable.cloud_download_24px),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.ssh_log_fetch_journal))
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (lines.isEmpty()) {
+                Text(
+                    stringResource(R.string.ssh_log_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LogPane(lines.joinToString("\n"), autoScroll = true)
+            }
+        }
     }
 }
 
