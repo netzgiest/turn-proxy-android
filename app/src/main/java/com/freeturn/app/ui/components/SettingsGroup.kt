@@ -11,18 +11,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -63,6 +70,130 @@ fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(content = content)
+    }
+}
+
+// Внутренний радиус сегментированной группы (между элементами). Внешний — shapes.large,
+// чтобы группа из одного элемента визуально совпадала с SettingsCard.
+private val GroupInnerCorner = CornerSize(5.dp)
+
+/**
+ * Форма элемента сегментированной группы (M3 expressive, как в системных настройках
+ * Android 16): наружные углы группы большие, внутренние — маленькие, между элементами
+ * микро-зазор (см. [SettingsGroup]).
+ */
+@Composable
+fun settingsItemShape(index: Int, count: Int): Shape {
+    val outer = MaterialTheme.shapes.large.topStart
+    return RoundedCornerShape(
+        topStart = if (index == 0) outer else GroupInnerCorner,
+        topEnd = if (index == 0) outer else GroupInnerCorner,
+        bottomStart = if (index == count - 1) outer else GroupInnerCorner,
+        bottomEnd = if (index == count - 1) outer else GroupInnerCorner
+    )
+}
+
+/**
+ * Слот для произвольного контрола внутри [SettingsCard] — текстовое поле, слайдер,
+ * сегменты, метка. Единый внутренний отступ (как у строк) + вертикальный зазор между
+ * вложенными элементами. Несколько слотов в одной карточке разделяй [SettingsRowDivider].
+ */
+@Composable
+fun SettingsFieldSlot(
+    verticalSpacing: androidx.compose.ui.unit.Dp = 12.dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+        content = content
+    )
+}
+
+/** Заголовок + пояснение над контролом (сегменты/слайдер): пара с плотным зазором. */
+@Composable
+fun SettingsControlLabel(title: String, desc: String? = null) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        if (desc != null) {
+            Text(desc, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Колонка сегментированной группы: элементы с зазором 2dp вместо разделителей. */
+@Composable
+fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.fillMaxWidth(),
+        content = content
+    )
+}
+
+/** Элемент сегментированной группы: тональный контейнер с формой по позиции. */
+@Composable
+fun SettingsGroupItem(index: Int, count: Int, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        shape = settingsItemShape(index, count),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(content = content)
+    }
+}
+
+/**
+ * Строка-свитч в стиле [SettingsEntryRow]: тональная иконка (опц.), заголовок/подзаголовок,
+ * trailing Switch с галкой в thumb (M3 expressive). Семантику несёт вся строка —
+ * toggleable + [Role.Switch], TalkBack озвучивает как переключатель с состоянием.
+ * Haptic встроен; [onCheckedChange] — чистое действие.
+ */
+@Composable
+fun SettingsSwitchRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    iconRes: Int? = null,
+    subtitle: String? = null,
+    enabled: Boolean = true
+) {
+    val context = LocalContext.current
+    // MD3 disabled content = 0.38 альфы; заголовок и подзаголовок гаснут синхронно.
+    val titleColor = if (enabled) MaterialTheme.colorScheme.onSurface
+    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    val subtitleColor = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = { v ->
+                    HapticUtil.perform(
+                        context,
+                        if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF
+                    )
+                    onCheckedChange(v)
+                }
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        if (iconRes != null) SettingsRowIcon(iconRes, enabled = enabled)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = titleColor)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = subtitleColor)
+            }
+        }
+        // null → display-only: клики и семантику несёт строка (один haptic, один фокус).
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

@@ -7,7 +7,6 @@ package com.freeturn.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,23 +17,20 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,14 +44,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.freeturn.app.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.freeturn.app.R
 import com.freeturn.app.data.ClientConfig
+import com.freeturn.app.data.DnsList
 import com.freeturn.app.data.DnsMode
 import com.freeturn.app.data.Provider
 import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.components.SectionLabel
+import com.freeturn.app.ui.components.SettingsCard
+import com.freeturn.app.ui.components.SettingsContentMaxWidth
+import com.freeturn.app.ui.components.SettingsControlLabel
+import com.freeturn.app.ui.components.SettingsFieldSlot
+import com.freeturn.app.ui.components.SettingsGroup
+import com.freeturn.app.ui.components.SettingsGroupItem
+import com.freeturn.app.ui.components.SettingsRowDivider
+import com.freeturn.app.ui.components.SettingsSwitchRow
 import com.freeturn.app.viewmodel.ServerViewModel
 import com.freeturn.app.viewmodel.SettingsViewModel
 import kotlin.math.roundToInt
@@ -119,8 +127,7 @@ fun ClientSetupScreen(
     var streamsPerCred by remember(saved.streamsPerCred) { mutableFloatStateOf(saved.streamsPerCred.toFloat()) }
     var localPort    by remember(saved.localPort)      { mutableStateOf(saved.localPort) }
     var magicTurn by remember(saved.magicTurn) { mutableStateOf(saved.magicTurn) }
-    var lastSliderInt by remember(saved.threads) { mutableIntStateOf(saved.threads) }
-    var lastStreamsInt by remember(saved.streamsPerCred) { mutableIntStateOf(saved.streamsPerCred) }
+    var customDns by remember(saved.customDns) { mutableStateOf(saved.customDns) }
 
     // Автозаполнение адреса сервера из SSH-конфига если поле пустое
     LaunchedEffect(effSshIp, effProxyListen) {
@@ -134,7 +141,7 @@ fun ClientSetupScreen(
     // clientEdit сам маршрутизирует запись в профиль by-id либо в legacy и под
     // mutex сверяет цель — защита от гонки переключения за время дебаунса.
     LaunchedEffect(
-        serverAddress, vkLink, threads, streamsPerCred, localPort, magicTurn
+        serverAddress, vkLink, threads, streamsPerCred, localPort, magicTurn, customDns
     ) {
         delay(600)
         clientEdit { current ->
@@ -144,17 +151,18 @@ fun ClientSetupScreen(
                 threads       = threads.roundToInt(),
                 streamsPerCred = streamsPerCred.roundToInt(),
                 localPort     = localPort.trim(),
-                magicTurn     = magicTurn.trim()
+                magicTurn     = magicTurn.trim(),
+                customDns     = customDns.trim()
             )
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = { Text(stringResource(R.string.provider_connection_settings)) },
                 navigationIcon = {
                     if (onBack != null) {
@@ -181,258 +189,231 @@ fun ClientSetupScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .widthIn(max = 840.dp)
+                    .widthIn(max = SettingsContentMaxWidth)
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Spacer(Modifier.height(4.dp))
-
-                // Подключение
-                Text(stringResource(R.string.connection_title), style = MaterialTheme.typography.titleMedium)
-
-                OutlinedTextField(
-                    value = serverAddress.redact(privacyMode),
-                    onValueChange = { if (!privacyMode) serverAddress = it },
-                    label = { Text(stringResource(R.string.server_address_label)) },
-                    placeholder = { Text(stringResource(R.string.server_address_placeholder)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    readOnly = privacyMode,
-                    supportingText = { Text(stringResource(R.string.server_address_support)) }
-                )
-
-                if (saved.provider == Provider.VK) {
-                    OutlinedTextField(
-                        value = vkLink.redact(privacyMode),
-                        onValueChange = { if (!privacyMode) vkLink = it },
-                        label = { Text(stringResource(R.string.call_link_label)) },
-                        placeholder = { Text(stringResource(R.string.call_link_placeholder)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        readOnly = privacyMode,
-                        supportingText = { Text(stringResource(R.string.call_link_support)) }
-                    )
-                }
-
-                OutlinedTextField(
-                    value = localPort.redact(privacyMode),
-                    onValueChange = { if (!privacyMode) localPort = it },
-                    label = { Text(stringResource(R.string.local_listen_address)) },
-                    placeholder = { Text(stringResource(R.string.local_listen_placeholder)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    readOnly = privacyMode,
-                    supportingText = { Text(stringResource(R.string.local_listen_support)) }
-                )
-
-                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
-
-                // Параметры
-                Text(stringResource(R.string.parameters_title), style = MaterialTheme.typography.titleMedium)
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.threads_format, threads.roundToInt()), style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                stringResource(R.string.threads_recommendation),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                // --- Подключение: адреса сервера/звонка/локальный ---
+                SectionLabel(stringResource(R.string.connection_title))
+                SettingsCard {
+                    SettingsFieldSlot {
+                        OutlinedTextField(
+                            value = serverAddress.redact(privacyMode),
+                            onValueChange = { if (!privacyMode) serverAddress = it },
+                            label = { Text(stringResource(R.string.server_address_label)) },
+                            placeholder = { Text(stringResource(R.string.server_address_placeholder)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            readOnly = privacyMode,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            supportingText = { Text(stringResource(R.string.server_address_support)) }
+                        )
+                    }
+                    if (saved.provider == Provider.VK) {
+                        SettingsRowDivider()
+                        SettingsFieldSlot {
+                            OutlinedTextField(
+                                value = vkLink.redact(privacyMode),
+                                onValueChange = { if (!privacyMode) vkLink = it },
+                                label = { Text(stringResource(R.string.call_link_label)) },
+                                placeholder = { Text(stringResource(R.string.call_link_placeholder)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                readOnly = privacyMode,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                supportingText = { Text(stringResource(R.string.call_link_support)) }
                             )
                         }
                     }
-                    Slider(
-                        value = threads,
-                        onValueChange = {
-                            val newInt = it.roundToInt()
-                            if (newInt != lastSliderInt) {
-                                HapticUtil.perform(context, HapticUtil.Pattern.SELECTION)
-                                lastSliderInt = newInt
-                            }
-                            threads = it
-                        },
-                        valueRange = 1f..128f,
-                        steps = 0,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        stringResource(R.string.streams_per_cred_format, streamsPerCred.roundToInt()),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        stringResource(R.string.streams_per_cred_recommendation),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Slider(
-                        value = streamsPerCred,
-                        onValueChange = {
-                            val v = it.roundToInt()
-                            if (v != lastStreamsInt) {
-                                HapticUtil.perform(context, HapticUtil.Pattern.SELECTION)
-                                lastStreamsInt = v
-                            }
-                            streamsPerCred = it
-                        },
-                        valueRange = 1f..50f,
-                        steps = 0,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column {
-                        Text(stringResource(R.string.dns_mode_title), style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            stringResource(R.string.dns_mode_desc),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    SettingsRowDivider()
+                    SettingsFieldSlot {
+                        OutlinedTextField(
+                            value = localPort.redact(privacyMode),
+                            onValueChange = { if (!privacyMode) localPort = it },
+                            label = { Text(stringResource(R.string.local_listen_address)) },
+                            placeholder = { Text(stringResource(R.string.local_listen_placeholder)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            readOnly = privacyMode,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            supportingText = { Text(stringResource(R.string.local_listen_support)) }
                         )
                     }
-                    val dnsOptions = listOf(
-                        DnsMode.AUTO to stringResource(R.string.dns_mode_auto),
-                        DnsMode.PLAIN to stringResource(R.string.dns_mode_udp),
-                        DnsMode.DOH to stringResource(R.string.dns_mode_doh)
+                }
+
+                // --- Производительность: потоки и потоки-на-аккаунт ---
+                SectionLabel(stringResource(R.string.client_section_performance))
+                SettingsCard {
+                    SettingsFieldSlot {
+                        SliderRow(
+                            valueLabel = stringResource(R.string.threads_format, threads.roundToInt()),
+                            hint = stringResource(R.string.threads_recommendation),
+                            value = threads,
+                            valueRange = 1f..128f,
+                            onValueChange = { threads = it },
+                            context = context
+                        )
+                    }
+                    SettingsRowDivider()
+                    SettingsFieldSlot {
+                        SliderRow(
+                            valueLabel = stringResource(R.string.streams_per_cred_format, streamsPerCred.roundToInt()),
+                            hint = stringResource(R.string.streams_per_cred_recommendation),
+                            value = streamsPerCred,
+                            valueRange = 1f..50f,
+                            onValueChange = { streamsPerCred = it },
+                            context = context
+                        )
+                    }
+                }
+
+                // --- DNS: режим резолвера, ручной список, DNS оператора ---
+                SectionLabel(stringResource(R.string.client_section_dns))
+                // Ручной DNS. UI и движок (ProxyService) нормализуют ввод одним DnsList:
+                // свитч оператора гасится только когда ручной список РЕАЛЬНО применится,
+                // невалидные токены подсвечиваются isError — поле не врёт про приоритет.
+                val dnsEffective = DnsList.normalize(customDns)
+                val dnsHasInvalid = DnsList.hasInvalidTokens(customDns)
+                SettingsCard {
+                    SettingsFieldSlot {
+                        SettingsControlLabel(
+                            title = stringResource(R.string.dns_mode_title),
+                            desc = stringResource(R.string.dns_mode_desc)
+                        )
+                        val dnsOptions = listOf(
+                            DnsMode.AUTO to stringResource(R.string.dns_mode_auto),
+                            DnsMode.PLAIN to stringResource(R.string.dns_mode_udp),
+                            DnsMode.DOH to stringResource(R.string.dns_mode_doh)
+                        )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            dnsOptions.forEachIndexed { idx, (value, label) ->
+                                SegmentedButton(
+                                    selected = saved.dnsMode == value,
+                                    onClick = {
+                                        HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
+                                        clientEdit { it.copy(dnsMode = value) }
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(index = idx, count = dnsOptions.size)
+                                ) { Text(label) }
+                            }
+                        }
+                    }
+                    SettingsRowDivider()
+                    SettingsFieldSlot {
+                        OutlinedTextField(
+                            value = customDns,
+                            onValueChange = { customDns = it },
+                            label = { Text(stringResource(R.string.dns_custom_label)) },
+                            placeholder = { Text("8.8.8.8, 1.1.1.1") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            isError = dnsHasInvalid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                            supportingText = {
+                                Text(stringResource(
+                                    if (dnsHasInvalid) R.string.dns_custom_invalid else R.string.dns_custom_hint
+                                ))
+                            }
+                        )
+                    }
+                    SettingsRowDivider()
+                    // DNS оператора — ниже ручного ввода, т.к. ручной список имеет приоритет
+                    // (см. ProxyService). При действующем ручном списке гасим свитч, чтобы
+                    // не вводить в заблуждение «включён, но не действует».
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.use_carrier_dns),
+                        subtitle = if (dnsEffective.isEmpty()) stringResource(R.string.use_carrier_dns_desc)
+                                   else stringResource(R.string.use_carrier_dns_overridden),
+                        checked = saved.useCarrierDns,
+                        enabled = dnsEffective.isEmpty(),
+                        onCheckedChange = { v -> clientEdit { it.copy(useCarrierDns = v) } }
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        dnsOptions.forEachIndexed { idx, (value, label) ->
+                }
+
+                // --- Дополнительно: транспорт TURN + флаги ---
+                SectionLabel(stringResource(R.string.client_section_advanced))
+                // TURN-транспорт (-transport tcp|udp) ортогонален режиму туннеля.
+                SettingsCard {
+                    SettingsFieldSlot {
+                        SettingsControlLabel(
+                            title = stringResource(R.string.transport_protocol),
+                            desc = stringResource(R.string.transport_protocol_desc)
+                        )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
-                                selected = saved.dnsMode == value,
+                                selected = !saved.useUdp,
                                 onClick = {
                                     HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
-                                    clientEdit { it.copy(dnsMode = value) }
+                                    clientEdit { it.copy(useUdp = false) }
                                 },
-                                shape = SegmentedButtonDefaults.itemShape(index = idx, count = dnsOptions.size)
-                            ) { Text(label) }
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                            ) { Text(stringResource(R.string.tcp)) }
+                            SegmentedButton(
+                                selected = saved.useUdp,
+                                onClick = {
+                                    HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
+                                    clientEdit { it.copy(useUdp = true) }
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                            ) { Text(stringResource(R.string.udp)) }
                         }
                     }
                 }
 
-                // TURN-транспорт (-transport tcp|udp) ортогонален режиму туннеля.
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column {
-                        Text(stringResource(R.string.transport_protocol), style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            stringResource(R.string.transport_protocol_desc),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                // Капча + Bond — сегментированная группа свитчей.
+                // Bond — client-only флаг (сервер детектит сам), только в TCP-режиме.
+                val toggleCount = if (effectiveTcpForward) 2 else 1
+                SettingsGroup {
+                    SettingsGroupItem(0, toggleCount) {
+                        SettingsSwitchRow(
+                            title = stringResource(R.string.manual_captcha),
+                            subtitle = stringResource(R.string.manual_captcha_desc),
+                            checked = saved.manualCaptcha,
+                            onCheckedChange = { v -> clientEdit { it.copy(manualCaptcha = v) } }
                         )
                     }
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = !saved.useUdp,
-                            onClick = {
-                                HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
-                                clientEdit { it.copy(useUdp = false) }
-                            },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                        ) { Text(stringResource(R.string.tcp)) }
-                        SegmentedButton(
-                            selected = saved.useUdp,
-                            onClick = {
-                                HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
-                                clientEdit { it.copy(useUdp = true) }
-                            },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                        ) { Text(stringResource(R.string.udp)) }
-                    }
-                }
-
-
-
-                SwitchRow(
-                    label = stringResource(R.string.manual_captcha),
-                    description = stringResource(R.string.manual_captcha_desc),
-                    checked = saved.manualCaptcha,
-                    onCheckedChange = { v ->
-                        HapticUtil.perform(context, if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
-                        clientEdit { it.copy(manualCaptcha = v) }
-                    }
-                )
-
-                SwitchRow(
-                    label = stringResource(R.string.use_carrier_dns),
-                    description = stringResource(R.string.use_carrier_dns_desc),
-                    checked = saved.useCarrierDns,
-                    onCheckedChange = { v ->
-                        HapticUtil.perform(context, if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
-                        clientEdit { it.copy(useCarrierDns = v) }
-                    }
-                )
-
-                SwitchRow(
-                    label = stringResource(R.string.debug_mode),
-                    description = stringResource(R.string.debug_mode_desc),
-                    checked = saved.debugMode,
-                    onCheckedChange = { v ->
-                        HapticUtil.perform(context, if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
-                        clientEdit { it.copy(debugMode = v) }
-                    }
-                )
-
-                SwitchRow(
-                    label = stringResource(R.string.magic_switch),
-                    description = stringResource(R.string.magic_switch_desc),
-                    checked = saved.magicSwitch,
-                    onCheckedChange = { v ->
-                        HapticUtil.perform(context, if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
-                        clientEdit { it.copy(magicSwitch = v) }
-                    }
-                )
-
-                if (saved.magicSwitch) {
-                    OutlinedTextField(
-                        value = magicTurn.redact(privacyMode),
-                        onValueChange = { if (!privacyMode) magicTurn = it },
-                        label = { Text(stringResource(R.string.magic_switch_address_label)) },
-                        placeholder = { Text(stringResource(R.string.magic_switch_address_placeholder)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        readOnly = privacyMode,
-                        supportingText = { Text(stringResource(R.string.magic_switch_address_support)) }
-                    )
-                }
-
-                // Bond — client-only флаг (сервер детектит сам). SSH не нужен;
-                // показываем только в TCP-форвард режиме.
-                if (effectiveTcpForward) {
-                    SwitchRow(
-                        label = stringResource(R.string.client_bond),
-                        description = stringResource(R.string.client_bond_desc),
-                        checked = saved.bond,
-                        onCheckedChange = { v ->
-                            HapticUtil.perform(context, if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
-                            // bond триггерит рестарт прокси только у активного; иначе пишем данные.
-                            if (isActive) settingsViewModel.setBond(v) else clientEdit { it.copy(bond = v) }
+                    if (effectiveTcpForward) {
+                        SettingsGroupItem(1, toggleCount) {
+                            SettingsSwitchRow(
+                                title = stringResource(R.string.client_bond),
+                                subtitle = stringResource(R.string.client_bond_desc),
+                                checked = saved.bond,
+                                // bond триггерит рестарт прокси только у активного; иначе пишем данные.
+                                onCheckedChange = { v ->
+                                    if (isActive) settingsViewModel.setBond(v) else clientEdit { it.copy(bond = v) }
+                                }
+                            )
                         }
-                    )
+                    }
                 }
 
-                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
-
-                // Режим подключения (Proxy/VPN) и WireGuard-конфиг вынесены в отдельный
-                // экран «Режим подключения» (ConnectionModeScreen). Здесь — клиентские
-                // параметры ядра и тоггл логов.
-
-                SwitchRow(
-                    label = stringResource(R.string.logs_enabled),
-                    description = stringResource(R.string.logs_enabled_desc),
-                    checked = saved.logsEnabled,
-                    onCheckedChange = { v ->
-                        HapticUtil.perform(context, if (v) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
-                        clientEdit { it.copy(logsEnabled = v) }
+                // Альтернативный TURN-узел — свитч + адрес (раскрывается при включении).
+                SettingsCard {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.magic_switch),
+                        subtitle = stringResource(R.string.magic_switch_desc),
+                        checked = saved.magicSwitch,
+                        onCheckedChange = { v -> clientEdit { it.copy(magicSwitch = v) } }
+                    )
+                    if (saved.magicSwitch) {
+                        SettingsRowDivider()
+                        SettingsFieldSlot {
+                            OutlinedTextField(
+                                value = magicTurn.redact(privacyMode),
+                                onValueChange = { if (!privacyMode) magicTurn = it },
+                                label = { Text(stringResource(R.string.magic_switch_address_label)) },
+                                placeholder = { Text(stringResource(R.string.magic_switch_address_placeholder)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                readOnly = privacyMode,
+                                supportingText = { Text(stringResource(R.string.magic_switch_address_support)) }
+                            )
+                        }
                     }
-                )
+                }
 
-
-                // Кнопка «Завершить» — только в онбординг-флоу
+                // Кнопка «Завершить» — только в онбординг-флоу.
                 if (showFinishButton && onFinish != null) {
                     Spacer(Modifier.height(8.dp))
                     Button(
@@ -451,33 +432,32 @@ fun ClientSetupScreen(
     }
 }
 
+/**
+ * Ползунок с подписью-значением и пояснением. Хаптик щёлкает на каждое целочисленное
+ * деление (а не на каждый float-кадр) — состояние держится локально внутри строки.
+ */
 @Composable
-internal fun SwitchRow(
-    label: String,
-    description: String,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit
+private fun SliderRow(
+    valueLabel: String,
+    hint: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
+    context: android.content.Context
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    var lastInt by remember { mutableIntStateOf(value.roundToInt()) }
+    SettingsControlLabel(title = valueLabel, desc = hint)
+    Slider(
+        value = value,
+        onValueChange = {
+            val newInt = it.roundToInt()
+            if (newInt != lastInt) {
+                HapticUtil.perform(context, HapticUtil.Pattern.SELECTION)
+                lastInt = newInt
+            }
+            onValueChange(it)
+        },
+        valueRange = valueRange,
         modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (enabled) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
-            Text(
-                description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
-    }
+    )
 }
-
