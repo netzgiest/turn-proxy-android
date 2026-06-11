@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.Settings
 
 /**
  * Apple-like haptic patterns for a tactile, musical feel.
@@ -31,6 +32,14 @@ object HapticUtil {
 
     @Suppress("DEPRECATION")
     fun perform(context: Context, pattern: Pattern) {
+        // Прямой Vibrator игнорирует системный «Виброотклик при касании» —
+        // проверяем настройку сами (performHapticFeedback здесь не подходит: нет View).
+        val hapticsEnabled = try {
+            Settings.System.getInt(
+                context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1
+            ) == 1
+        } catch (_: Exception) { true }
+        if (!hapticsEnabled) return
         val vibrator = context.getSystemService(Vibrator::class.java) ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val effect = when (pattern) {
