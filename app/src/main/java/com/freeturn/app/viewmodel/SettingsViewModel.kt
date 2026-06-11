@@ -163,9 +163,6 @@ class SettingsViewModel(
                 ?: return@launch
             prefs.setActiveServerId(target.id)
 
-            val serverRunning = (sshRepository.serverState.value as? ServerState.Known)?.running == true
-            if (serverRunning) orchestrator.restartServerIfRunning()
-
             if (ProxyServiceState.isRunning.value) {
                 proxyManager.stopProxy()
                 withTimeoutOrNull(2_000) {
