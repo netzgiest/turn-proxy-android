@@ -8,13 +8,13 @@ package com.freeturn.app.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -57,6 +57,7 @@ import com.freeturn.app.ui.components.SectionLabel
 import com.freeturn.app.ui.components.SettingsCard
 import com.freeturn.app.ui.components.SettingsContentMaxWidth
 import com.freeturn.app.ui.components.SettingsEntryRow
+import com.freeturn.app.ui.components.SettingsFieldSlot
 import com.freeturn.app.ui.components.SettingsRowDivider
 import com.freeturn.app.ui.theme.extendedColorScheme
 import com.freeturn.app.ui.util.redact
@@ -70,8 +71,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * Экран «Режим подключения»: явный переключатель Proxy / VPN (WireGuard). В VPN-режиме
- * — импорт .conf из файла, имя туннеля и split-tunnel модалкой (для активного сервера).
- * Режим хранится в [ClientConfig.tunnelTransport] (NONE = proxy, WIREGUARD = vpn).
+ * — .conf из файла или ручной вставкой, имя туннеля и split-tunnel модалкой (для
+ * активного сервера). Режим хранится в [ClientConfig.tunnelTransport] (NONE = proxy,
+ * WIREGUARD = vpn).
  */
 @Composable
 fun ConnectionModeScreen(
@@ -228,8 +230,6 @@ fun ConnectionModeScreen(
                     // --- Конфигурация туннеля ---
                     SectionLabel(stringResource(R.string.connection_config_section))
                     SettingsCard {
-                        // Конфиг задаётся только файлом — вставка текстом давала тот же
-                        // результат, а endpoint всё равно подменяется в рантайме.
                         SettingsEntryRow(
                             iconRes = R.drawable.cloud_download_24px,
                             title = stringResource(R.string.load_wg_conf),
@@ -239,7 +239,20 @@ fun ConnectionModeScreen(
                             onClick = { filePicker.launch("*/*") }
                         )
                         SettingsRowDivider()
-                        Box(modifier = Modifier.padding(16.dp)) {
+                        SettingsFieldSlot {
+                            // Та же ручная вставка .conf, что на шаге конфига мастера.
+                            // Конфиг содержит приватный ключ — под privacyMode маскируем.
+                            OutlinedTextField(
+                                value = wgConfig.redact(privacyMode),
+                                onValueChange = { if (!privacyMode) wgConfig = it },
+                                label = { Text(stringResource(R.string.setup_wg_conf_label)) },
+                                placeholder = { Text(stringResource(R.string.setup_wg_conf_placeholder)) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 160.dp),
+                                maxLines = 10,
+                                readOnly = privacyMode
+                            )
                             OutlinedTextField(
                                 value = wgName.redact(privacyMode),
                                 onValueChange = { if (!privacyMode) wgName = it },
