@@ -21,7 +21,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -46,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Outline
@@ -72,7 +70,7 @@ import com.freeturn.app.viewmodel.ProxyState
 /**
  * Герой главного экрана: кнопка-тоггл с морфом MaterialShapes по состоянию
  * (idle-печенька → вращающееся «солнце» подключения → круг работы → burst ошибки),
- * ambient-glow позади, анимированная строка статуса и пилюля счётчика/uptime.
+ * анимированная строка статуса и пилюля счётчика/uptime.
  * Чистый компонент: состояние и колбэк приходят снаружи.
  */
 @Composable
@@ -154,17 +152,6 @@ private fun HeroToggleButton(
         animationSpec = tween(500),
         label = "btn_fg"
     )
-    // Ambient glow позади кнопки в акцентном цвете состояния.
-    val glowColor by animateColorAsState(
-        targetValue = when (kind) {
-            HeroKind.Running -> extended.success
-            HeroKind.Error -> MaterialTheme.colorScheme.error
-            HeroKind.Busy -> MaterialTheme.colorScheme.secondary
-            HeroKind.Idle -> MaterialTheme.colorScheme.primary
-        }.copy(alpha = 0.22f),
-        animationSpec = tween(500),
-        label = "btn_glow"
-    )
     val scale by animateFloatAsState(
         targetValue = if (kind == HeroKind.Busy) 0.96f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -194,46 +181,36 @@ private fun HeroToggleButton(
         angle
     } else 0f
 
-    Box(contentAlignment = Alignment.Center) {
-        val glowBrush = remember(glowColor) {
-            Brush.radialGradient(listOf(glowColor, Color.Transparent))
-        }
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(148.dp)
+            .scale(scale)
+            .graphicsLayer { rotationZ = rotation }
+            .semantics { contentDescription = buttonLabel },
+        shape = heroShape,
+        color = containerColor,
+        tonalElevation = if (kind == HeroKind.Running) 3.dp else 1.dp
+    ) {
         Box(
-            Modifier
-                .size(232.dp)
-                .background(glowBrush)
-        )
-        Surface(
-            onClick = onClick,
+            // Контр-вращение: крутится только фигура, контент стоит на месте.
             modifier = Modifier
-                .size(148.dp)
-                .scale(scale)
-                .graphicsLayer { rotationZ = rotation }
-                .semantics { contentDescription = buttonLabel },
-            shape = heroShape,
-            color = containerColor,
-            tonalElevation = if (kind == HeroKind.Running) 3.dp else 1.dp
+                .fillMaxSize()
+                .graphicsLayer { rotationZ = -rotation },
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                // Контр-вращение: крутится только фигура, контент стоит на месте.
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { rotationZ = -rotation },
-                contentAlignment = Alignment.Center
-            ) {
-                if (reducedMotion) {
-                    HeroIcon(kind = kind, tint = contentColor)
-                } else {
-                    AnimatedContent(
-                        targetState = kind,
-                        transitionSpec = {
-                            (fadeIn(tween(220)) + scaleIn(initialScale = 0.6f, animationSpec = tween(260)))
-                                .togetherWith(fadeOut(tween(120)) + scaleOut(targetScale = 0.6f, animationSpec = tween(120)))
-                        },
-                        label = "hero_icon"
-                    ) { k ->
-                        HeroIcon(kind = k, tint = contentColor)
-                    }
+            if (reducedMotion) {
+                HeroIcon(kind = kind, tint = contentColor)
+            } else {
+                AnimatedContent(
+                    targetState = kind,
+                    transitionSpec = {
+                        (fadeIn(tween(220)) + scaleIn(initialScale = 0.6f, animationSpec = tween(260)))
+                            .togetherWith(fadeOut(tween(120)) + scaleOut(targetScale = 0.6f, animationSpec = tween(120)))
+                    },
+                    label = "hero_icon"
+                ) { k ->
+                    HeroIcon(kind = k, tint = contentColor)
                 }
             }
         }
