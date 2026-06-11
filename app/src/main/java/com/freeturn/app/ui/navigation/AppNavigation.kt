@@ -21,6 +21,7 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -63,6 +64,9 @@ import com.freeturn.app.viewmodel.ProxyState
 import com.freeturn.app.viewmodel.SettingsViewModel
 import com.freeturn.app.viewmodel.ProxyViewModel
 import com.freeturn.app.viewmodel.ServerViewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import org.koin.androidx.compose.koinViewModel
 
 object Routes {
@@ -131,6 +135,17 @@ fun AppNavigation(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
+
+    // Смена активного профиля делает сохранённый стек вкладки «Настройки» устаревшим
+    // (там мог остаться хаб другого сервера) — сбрасываем его к корню. Если стек
+    // настроек сейчас активен (не сохранён), clearBackStack — no-op.
+    LaunchedEffect(navController) {
+        settingsViewModel.serversSnapshot
+            .map { it.activeId }
+            .distinctUntilChanged()
+            .drop(1) // первая эмиссия — текущее значение, не смена
+            .collect { navController.clearBackStack(Routes.SETTINGS_GRAPH) }
+    }
 
     var showTgDialog by rememberSaveable { mutableStateOf(!initialTgSubscribeShown) }
 
