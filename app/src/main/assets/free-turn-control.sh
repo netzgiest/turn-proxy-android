@@ -174,7 +174,7 @@ cmd_probe() {
                 | head -n1 | sed 's/.*=[[:space:]]*//; s/[#;].*//' | tr -d ' \r' || true)
         fi
         case "$wgp" in
-            ''|*[!0-9]*) ;;
+            ''|0|*[!0-9]*) ;;
             *) emit WG_PORT "$wgp" ;;
         esac
     else
@@ -574,6 +574,46 @@ _wg_existing_port() {  # CONF_PATH
         | head -n1 | sed 's/.*=[[:space:]]*//; s/[#;].*//' | tr -d ' \r' || true
 }
 
+_wg_runtime_port() {  # IFACE — фактический порт живого интерфейса (пусто, если не поднят)
+    local p
+    p=$(wg show "$1" listen-port 2>/dev/null | tr -d ' \r' || true)
+    # «0» = порт не назначен — для форварда бесполезен.
+    [ "$p" != "0" ] && printf '%s' "$p" || true
+}
+
+# Сохранённый клиентский конфиг прошлой установки валиден против текущего
+# серверного conf: ключ клиента числится пиром, серверный ключ совпадает.
+# Иначе conf протух (WG переставили, пира удалили) — переиспользовать нельзя.
+_wg_client_conf_valid() {  # SERVER_CONF
+    local conf="$1" cli_priv cli_pub srv_priv srv_pub conf_srv_pub
+    cli_priv=$(sed -n 's/^[[:space:]]*PrivateKey[[:space:]]*=[[:space:]]*//p' "$WG_CLIENT_CONF" | head -n1 | tr -d ' \r')
+    [ -n "$cli_priv" ] || return 1
+    cli_pub=$(printf '%s' "$cli_priv" | wg pubkey 2>/dev/null) || return 1
+    sed -n 's/^[[:space:]]*PublicKey[[:space:]]*=[[:space:]]*//p' "$conf" | tr -d ' \r' \
+        | grep -qxF "$cli_pub" || return 1
+    srv_priv=$(sed -n 's/^[[:space:]]*PrivateKey[[:space:]]*=[[:space:]]*//p' "$conf" | head -n1 | tr -d ' \r')
+    [ -n "$srv_priv" ] || return 1
+    srv_pub=$(printf '%s' "$srv_priv" | wg pubkey 2>/dev/null) || return 1
+    conf_srv_pub=$(sed -n 's/^[[:space:]]*PublicKey[[:space:]]*=[[:space:]]*//p' "$WG_CLIENT_CONF" | head -n1 | tr -d ' \r')
+    [ "$conf_srv_pub" = "$srv_pub" ]
+}
+
+# Пир есть в conf, но мог пропасть с живого интерфейса (wg set прошлой
+# установки упал молча, рестарта wg-quick не было) — досинхронизируем.
+_wg_sync_live_peer() {  # IFACE
+    local iface="$1" cli_priv cli_pub ips
+    wg show "$iface" >/dev/null 2>&1 || return 0
+    cli_priv=$(sed -n 's/^[[:space:]]*PrivateKey[[:space:]]*=[[:space:]]*//p' "$WG_CLIENT_CONF" | head -n1 | tr -d ' \r')
+    [ -n "$cli_priv" ] || return 0
+    cli_pub=$(printf '%s' "$cli_priv" | wg pubkey 2>/dev/null) || return 0
+    if wg show "$iface" peers 2>/dev/null | grep -qxF "$cli_pub"; then return 0; fi
+    ips=$(sed -n 's/^[[:space:]]*Address[[:space:]]*=[[:space:]]*//p' "$WG_CLIENT_CONF" | head -n1 | tr -d ' \r')
+    [ -n "$ips" ] || return 0
+    log "re-adding client peer to live $iface"
+    wg set "$iface" peer "$cli_pub" allowed-ips "$ips" 2>/dev/null \
+        || log "warning: wg set $iface failed - restart wg-quick@$iface manually"
+}
+
 # Добавляет отдельного пира в СУЩЕСТВУЮЩИЙ conf и пишет клиентский конфиг.
 # _wg_add_peer CONF_PATH IFACE; код 1 — нестандартный conf (нет PrivateKey/Address),
 # вызывающий продолжает без клиентского конфига.
@@ -650,16 +690,25 @@ cmd_wg_setup() {
     conf=$(ls "$WG_DIR"/*.conf 2>/dev/null | head -n1 || true)
     if [ -n "$conf" ]; then
         iface=$(basename "$conf" .conf)
-        exist_port=$(_wg_existing_port "$conf")
         systemctl enable --now "wg-quick@$iface" >/dev/null 2>&1 \
             || wg-quick up "$iface" >/dev/null 2>&1 \
             || log "warning: cannot bring up $iface - check WireGuard on server"
-        # Своего клиентского конфига ещё нет — добавляем отдельного пира для
-        # этого устройства (повторный запуск переиспользует готовый конфиг).
+        # Порт: у живого интерфейса надёжнее, чем ListenPort из conf — туда
+        # и форвардит free-turn-proxy.
+        exist_port=$(_wg_runtime_port "$iface")
+        [ -n "$exist_port" ] || exist_port=$(_wg_existing_port "$conf")
+        case "$exist_port" in ''|*[!0-9]*) exist_port="" ;; esac
+        # Готовый клиентский конфиг переиспользуем только пока он валиден
+        # против текущего conf — протухший даёт мёртвый туннель у клиента.
+        if [ -f "$WG_CLIENT_CONF" ] && ! _wg_client_conf_valid "$conf"; then
+            log "stored client conf is stale - regenerating peer"
+            rm -f "$WG_CLIENT_CONF"
+        fi
         if [ ! -f "$WG_CLIENT_CONF" ]; then
             _wg_add_peer "$conf" "$iface" \
                 || log "cannot add peer to $conf - import client conf manually"
         fi
+        if [ -f "$WG_CLIENT_CONF" ]; then _wg_sync_live_peer "$iface"; fi
         emit WG_EXISTS yes
         emit WG_PORT "${exist_port:-$ARG_WG_PORT}"
         _emit_wg_client_conf
