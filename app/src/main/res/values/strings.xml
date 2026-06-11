@@ -193,7 +193,7 @@
     <!-- SshSetupScreen -->
     <string name="show_password">Показать пароль</string>
     <string name="hide_password">Скрыть пароль</string>
-    <string name="connect_to_server">Сопряжение с сервером</string>
+    <string name="connect_to_server">Сопряжение</string>
     <string name="back">Назад</string>
     <string name="server_data">Данные сервера</string>
     <string name="server_ip_label">IP-адрес сервера</string>
