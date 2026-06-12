@@ -1099,7 +1099,7 @@ private fun LaunchParamBlock(label: String, commandLine: String) {
 }
 
 /** Флаги клиента (-flag value), значение которых прячем под privacyMode. */
-private val CLIENT_SECRET_FLAGS = setOf("-peer", "-link", "-obf-key", "-turn")
+private val CLIENT_SECRET_FLAGS = setOf("-peer", "-link", "-obf-key", "-turn", "-client-id")
 
 /** Командная строка клиентского ядра (как в движке) с маской секретов. */
 private fun clientCommandLine(server: Server, privacy: Boolean): String {

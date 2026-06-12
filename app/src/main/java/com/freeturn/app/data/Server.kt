@@ -92,6 +92,7 @@ internal object ServerJson {
             put("splitTunnelMode", p.client.splitTunnelMode)
             put("splitTunnelApps", p.client.splitTunnelApps)
             put("logsEnabled", p.client.logsEnabled)
+            put("clientId", p.client.clientId)
         })
         put("proxyListen", p.proxyListen)
         put("proxyConnect", p.proxyConnect)
@@ -156,7 +157,8 @@ internal object ServerJson {
                     if (it in SplitTunnelMode.VALUES) it else SplitTunnelMode.ALL
                 },
                 splitTunnelApps = cliO.optString("splitTunnelApps"),
-                logsEnabled = cliO.optBoolean("logsEnabled", true)
+                logsEnabled = cliO.optBoolean("logsEnabled", true),
+                clientId = cliO.optString("clientId")
             ),
             proxyListen = o.optString("proxyListen").ifBlank { "0.0.0.0:56000" },
             proxyConnect = o.optString("proxyConnect").ifBlank { "127.0.0.1:40537" },

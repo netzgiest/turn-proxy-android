@@ -25,7 +25,8 @@ class ProxyOrchestrator(
             listen = l, connect = c,
             tcpMode = tcpMode,
             obfProfile = if (opts.obfEnabled) opts.obfProfile else "none",
-            obfKey = if (opts.obfEnabled) opts.obfKey else ""
+            obfKey = if (opts.obfEnabled) opts.obfKey else "",
+            clientId = prefs.ownClientId()
         )
     }
 
@@ -47,7 +48,8 @@ class ProxyOrchestrator(
             listen = l, connect = c,
             tcpMode = tcpMode,
             obfProfile = if (opts.obfEnabled) opts.obfProfile else "none",
-            obfKey = if (opts.obfEnabled) opts.obfKey else ""
+            obfKey = if (opts.obfEnabled) opts.obfKey else "",
+            clientId = prefs.ownClientId()
         )
     }
 }

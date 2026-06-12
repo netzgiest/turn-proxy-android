@@ -231,7 +231,7 @@ class ServerSetupViewModel(
                 .onFailure { e ->
                     HapticUtil.perform(appContext, HapticUtil.Pattern.ERROR)
                     _uiState.update {
-                        it.copy(checkingSsh = false, sshError = e.message ?: "SSH error")
+                        it.copy(checkingSsh = false, sshError = e.uiMessage(appContext))
                     }
                 }
         }
@@ -323,7 +323,10 @@ class ServerSetupViewModel(
                     connect = "127.0.0.1:$backendPort",
                     tcpMode = !c.vpnMode && c.backendTcp,
                     obfProfile = c.obfProfile,
-                    obfKey = if (obfOn) obfKey else ""
+                    obfKey = if (obfOn) obfKey else "",
+                    // Авторизация по allowlist с первого запуска: владелец сидится
+                    // в clients.json, сервер стартует с -clients-file.
+                    clientId = prefs.ownClientId()
                 )
             ).onFailure { fail(it.message); return@launch }
             advance()

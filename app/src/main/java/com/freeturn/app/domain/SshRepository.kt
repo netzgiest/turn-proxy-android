@@ -183,7 +183,8 @@ class SshRepository(
         connect: String,
         tcpMode: Boolean = false,
         obfProfile: String = "none",
-        obfKey: String = ""
+        obfKey: String = "",
+        clientId: String = ""
     ): Boolean {
         val cfg = activeSshConfig ?: return false
         if (cfg.ip.isEmpty()) return false
@@ -197,7 +198,8 @@ class SshRepository(
                     connect = connect,
                     tcpMode = tcpMode,
                     obfProfile = obfProfile,
-                    obfKey = obfKey
+                    obfKey = obfKey,
+                    clientId = clientId
                 )
             )
         )

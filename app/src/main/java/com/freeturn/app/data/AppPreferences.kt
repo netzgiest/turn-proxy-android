@@ -4,16 +4,23 @@ package com.freeturn.app.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.security.SecureRandom
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_prefs")
+// Битый файл переживаем с дефолтами: чтение/запись на пути старта туннеля
+// (ownClientId, оркестратор) не должны ронять процесс.
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "app_prefs",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
 
 data class SshConfig(
     val ip: String = "",
@@ -60,6 +67,17 @@ object ObfProfile {
         ByteArray(32).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
 }
 
+/** Client ID (флаг -client-id ядра): авторизация по allowlist clients.json на сервере. */
+object ClientId {
+    private val ID_REGEX = Regex("^[0-9a-f]{32}$")
+
+    /** Формат, который генерирует и валидирует приложение (16 байт → 32-hex, как автоген ядра). */
+    fun isValid(id: String): Boolean = id.matches(ID_REGEX)
+
+    fun generate(): String =
+        ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+}
+
 /**
  * Транспорт «туннельного приложения» поверх локального прокси. Пока единственный —
  * WireGuard (GoBackend): поднимает VPN-туннель, чей Endpoint указывает на localPort
@@ -90,7 +108,7 @@ data class ClientConfig(
     val provider: String = Provider.VK,
     val threads: Int = 12,
     /** Соответствует флагу `-streams-per-cred` ядра. Дефолт ядра = 10, наш = 6. */
-    val streamsPerCred: Int = 6,
+    val streamsPerCred: Int = DEFAULT_STREAMS_PER_CRED,
     /** TURN-транспорт UDP (-transport udp). false = TCP/TLS (дефолт ядра и наш). */
     val useUdp: Boolean = false,
     val manualCaptcha: Boolean = false,
@@ -133,7 +151,12 @@ data class ClientConfig(
     /** Список package-имён для include/exclude (разделители: запятая/пробел/перенос строки). */
     val splitTunnelApps: String = "",
     /** Сбор логов ядра в UI. false = ProxyServiceState.addLog глотает строки. */
-    val logsEnabled: Boolean = true
+    val logsEnabled: Boolean = true,
+    /**
+     * -client-id для этого сервера: у импортированного доступа — cid из share-ссылки
+     * (он в allowlist владельца). Пусто = общий ID устройства (свои серверы).
+     */
+    val clientId: String = ""
 ) {
     /** WG реально активен только если выбран WG-транспорт и задан непустой конфиг. */
     val wireGuardActive: Boolean
@@ -141,6 +164,7 @@ data class ClientConfig(
 
     companion object {
         const val DEFAULT_LOCAL_PORT = "127.0.0.1:9000"
+        const val DEFAULT_STREAMS_PER_CRED = 6
     }
 }
 
@@ -153,6 +177,7 @@ class AppPreferences(context: Context) {
         val TG_SUBSCRIBE_SHOWN = booleanPreferencesKey("tg_subscribe_shown")
         val SERVERS_JSON = stringPreferencesKey("servers_json")
         val ACTIVE_SERVER_ID = stringPreferencesKey("active_server_id")
+        val OWN_CLIENT_ID = stringPreferencesKey("own_client_id")
     }
 
     /** DataStore-флоу: IOException (битый файл) → дефолты, остальное пробрасываем. */
@@ -311,6 +336,24 @@ class AppPreferences(context: Context) {
 
     suspend fun setTgSubscribeShown() {
         context.dataStore.edit { prefs -> prefs[TG_SUBSCRIBE_SHOWN] = true }
+    }
+
+    /**
+     * Постоянный Client ID устройства (-client-id владельца). Генерируется один раз;
+     * start-команда сервера сажает его в allowlist и включает -clients-file.
+     */
+    suspend fun ownClientId(): String {
+        // Read-first: write-транзакция на пути старта туннеля нужна один раз за
+        // жизнь установки — когда ключа ещё нет.
+        val cur = prefFlow { it[OWN_CLIENT_ID] }.first()
+        if (cur != null && ClientId.isValid(cur)) return cur
+        var id = ""
+        context.dataStore.edit { prefs ->
+            val existing = prefs[OWN_CLIENT_ID]
+            id = if (existing != null && ClientId.isValid(existing)) existing
+            else ClientId.generate().also { prefs[OWN_CLIENT_ID] = it }
+        }
+        return id
     }
 
     /** Полный сброс настроек. */

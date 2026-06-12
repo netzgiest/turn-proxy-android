@@ -226,7 +226,7 @@ class ProxyService : Service() {
             // расходится с реально запускаемой. DNS оператора резолвим здесь (зависит от
             // активной сети) и передаём в билдер.
             val carrierDns = if (cfg.useCarrierDns) activeNetworkDnsServers() else null
-            cmdArgs.addAll(CoreArgs.client(cfg, srv, carrierDns))
+            cmdArgs.addAll(CoreArgs.client(cfg, srv, carrierDns, prefs.ownClientId()))
         }
 
         var exitCode = -1

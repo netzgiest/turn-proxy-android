@@ -7,7 +7,8 @@ package com.freeturn.app.data
  *
  * Возвращает аргументы БЕЗ имени бинарника. DNS оператора ([carrierDns]) резолвится
  * только в движке (зависит от активной сети); в UI передаём null — флаг -dns-servers
- * (оператор) тогда опускается, он добавится лишь при реальном запуске.
+ * (оператор) тогда опускается, он добавится лишь при реальном запуске. [ownClientId]
+ * аналогично: ID устройства знает движок, UI передаёт null.
  */
 object CoreArgs {
 
@@ -15,6 +16,7 @@ object CoreArgs {
         cfg: ClientConfig,
         srv: ServerOpts,
         carrierDns: String? = null,
+        ownClientId: String? = null,
     ): List<String> = buildList {
         add("-peer"); add(cfg.serverAddress)
         add("-provider"); add(cfg.provider)
@@ -55,5 +57,9 @@ object CoreArgs {
         if (cfg.magicSwitch) {
             cfg.magicTurn.trim().takeIf { it.isNotEmpty() }?.let { add("-turn"); add(it) }
         }
+        // -client-id: cid из share-ссылки (импортированный доступ) либо общий ID
+        // устройства — сервер с -clients-file пускает только ID из allowlist.
+        val clientId = cfg.clientId.ifBlank { ownClientId.orEmpty() }
+        if (clientId.isNotBlank()) { add("-client-id"); add(clientId) }
     }
 }
