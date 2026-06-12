@@ -1,7 +1,6 @@
 package com.freeturn.app.domain
 
 import android.content.Context
-import com.freeturn.app.SSHManager
 import com.freeturn.app.data.SshConfig
 import com.freeturn.app.data.share.ShareInfo
 import com.freeturn.app.data.share.SharedClient
@@ -22,9 +21,8 @@ import java.util.Base64
  * и [ServerControl] — как у [ServerSetupRepository]: не трогаем живую сессию
  * активного сервера. Состояния не держит, ошибки — типизированным [Result].
  */
-class ShareRepository(context: Context) {
+class ShareRepository(context: Context, ssh: SSHManager) {
 
-    private val ssh = SSHManager()
     private val control = ServerControl(context, ssh)
 
     /** Свежесозданный пир: клиентский conf для ссылки + pubkey/ip для локального

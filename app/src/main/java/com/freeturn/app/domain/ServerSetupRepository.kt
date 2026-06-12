@@ -1,7 +1,6 @@
 package com.freeturn.app.domain
 
 import android.content.Context
-import com.freeturn.app.SSHManager
 import com.freeturn.app.data.SshConfig
 import com.freeturn.app.domain.server.CmdResult
 import com.freeturn.app.domain.server.ServerCommand
@@ -17,9 +16,8 @@ import com.freeturn.app.domain.server.toFailure
  * активного сервера ([SshRepository]). Состояния не держит — каждая операция
  * самостоятельный вызов, ошибки приходят типизированным [Result].
  */
-class ServerSetupRepository(context: Context) {
+class ServerSetupRepository(context: Context, private val ssh: SSHManager) {
 
-    private val ssh = SSHManager()
     private val control = ServerControl(context, ssh)
 
     /** Отпечаток хоста, увиденный последней командой (TOFU) — сохраняется в сервер. */

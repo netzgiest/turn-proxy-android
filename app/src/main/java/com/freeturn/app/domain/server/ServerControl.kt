@@ -1,7 +1,7 @@
 package com.freeturn.app.domain.server
 
 import android.content.Context
-import com.freeturn.app.SSHManager
+import com.freeturn.app.domain.SSHManager
 import com.freeturn.app.data.SshConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

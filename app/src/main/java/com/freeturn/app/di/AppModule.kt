@@ -5,6 +5,7 @@ import com.freeturn.app.domain.AppUpdater
 import com.freeturn.app.domain.LinkImportBus
 import com.freeturn.app.domain.LocalProxyManager
 import com.freeturn.app.domain.ProxyOrchestrator
+import com.freeturn.app.domain.SSHManager
 import com.freeturn.app.domain.ServerSetupRepository
 import com.freeturn.app.domain.ShareRepository
 import com.freeturn.app.domain.SshRepository
@@ -21,13 +22,16 @@ import org.koin.dsl.module
 val appModule = module {
     single { AppPreferences(androidContext()) }
     single { LocalProxyManager(androidContext()) }
-    single { SshRepository(androidContext()) }
+    // factory: каждому потребителю свой SSHManager — lastSeenFingerprint (TOFU) не должен
+    // делиться между живой сессией и мастером/шарингом.
+    factory { SSHManager() }
+    single { SshRepository(androidContext(), get()) }
     single { AppUpdater(androidContext()) }
     single { ProxyOrchestrator(get(), get(), get()) }
     // factory: своя SSH-сессия на каждый прогон мастера, живой SshRepository не трогаем.
-    factory { ServerSetupRepository(androidContext()) }
+    factory { ServerSetupRepository(androidContext(), get()) }
     // factory по той же причине: SSH-операции шаринга не делят сессию с активным сервером.
-    factory { ShareRepository(androidContext()) }
+    factory { ShareRepository(androidContext(), get()) }
     single { LinkImportBus() }
 
     viewModelOf(::ProxyViewModel)
