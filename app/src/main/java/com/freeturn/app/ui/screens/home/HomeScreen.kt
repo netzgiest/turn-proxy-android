@@ -27,7 +27,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,12 +81,12 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // Standard bottom sheet: свёрнутый peek = карточка активного сервера,
-    // тянется вверх до полного списка серверов. skipHiddenState — sheet всегда
-    // виден, не прячется полностью.
+    // тянется вверх до полного списка серверов. Без Hidden в enabledValues —
+    // sheet всегда виден, не прячется полностью.
     val sheetScaffoldState = rememberBottomSheetScaffoldState(
-        bottomSheetState = rememberStandardBottomSheetState(
+        bottomSheetState = rememberBottomSheetState(
             initialValue = SheetValue.PartiallyExpanded,
-            skipHiddenState = true
+            enabledValues = setOf(SheetValue.PartiallyExpanded, SheetValue.Expanded)
         )
     )
     // WireGuard-туннелю нужно согласие пользователя на VPN. После выдачи —

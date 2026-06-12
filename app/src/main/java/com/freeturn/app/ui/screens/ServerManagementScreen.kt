@@ -156,9 +156,8 @@ fun ServerManagementScreen(
         if (isActive) {
             settingsViewModel.applyServerConfig(listenFull, proxyConnect, tcpDraft, obfDraft, keyDraft)
         } else {
-            serverId?.let {
-                settingsViewModel.updateServerConfig(it, listenFull, proxyConnect, tcpDraft, obfDraft, keyDraft)
-            }
+            // !isActive ⇒ serverId != null (см. isActive выше) — smart cast.
+            settingsViewModel.updateServerConfig(serverId, listenFull, proxyConnect, tcpDraft, obfDraft, keyDraft)
         }
         onBack()
     }
@@ -251,7 +250,7 @@ fun ServerManagementScreen(
                         actionLabel = stringResource(R.string.make_active),
                         onAction = {
                             HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                            serverId?.let { settingsViewModel.applyServer(it) }
+                            settingsViewModel.applyServer(serverId)
                         }
                     )
                     Spacer(Modifier.height(24.dp))
