@@ -3,7 +3,7 @@
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class
 )
 
-package com.freeturn.app.ui.screens
+package com.freeturn.app.ui.screens.connectionmode
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -24,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -52,23 +50,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freeturn.app.R
 import com.freeturn.app.data.ClientConfig
 import com.freeturn.app.data.TunnelTransport
+import com.freeturn.app.domain.ProxyState
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.ui.components.SectionLabel
 import com.freeturn.app.ui.components.SettingsCard
 import com.freeturn.app.ui.components.SettingsContentMaxWidth
 import com.freeturn.app.ui.components.SettingsEntryRow
-import com.freeturn.app.ui.components.SettingsFieldSlot
-import com.freeturn.app.ui.components.SettingsRowDivider
-import com.freeturn.app.ui.theme.extendedColorScheme
-import com.freeturn.app.ui.util.redact
-import com.freeturn.app.domain.ProxyState
+import com.freeturn.app.ui.screens.splittunnel.SplitTunnelModal
+import com.freeturn.app.ui.theme.Spacing
 import com.freeturn.app.viewmodel.ProxyViewModel
 import com.freeturn.app.viewmodel.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.freeturn.app.ui.theme.Spacing
 
 /**
  * Экран «Режим подключения»: явный переключатель Proxy / VPN (WireGuard). В VPN-режиме
@@ -226,44 +221,14 @@ fun ConnectionModeScreen(
                 )
 
                 if (isVpn) {
-                    val configLoaded = wgConfig.isNotBlank()
-
-                    // --- Конфигурация туннеля ---
-                    SectionLabel(stringResource(R.string.connection_config_section))
-                    SettingsCard {
-                        SettingsEntryRow(
-                            iconRes = R.drawable.cloud_download_24px,
-                            title = stringResource(R.string.load_wg_conf),
-                            trailingRes = if (configLoaded) R.drawable.check_circle_24px else null,
-                            trailingTint = MaterialTheme.extendedColorScheme.success,
-                            enabled = !privacyMode,
-                            onClick = { filePicker.launch("*/*") }
-                        )
-                        SettingsRowDivider()
-                        SettingsFieldSlot {
-                            // Та же ручная вставка .conf, что на шаге конфига мастера.
-                            // Конфиг содержит приватный ключ — под privacyMode маскируем.
-                            OutlinedTextField(
-                                value = wgConfig.redact(privacyMode),
-                                onValueChange = { if (!privacyMode) wgConfig = it },
-                                label = { Text(stringResource(R.string.setup_wg_conf_label)) },
-                                placeholder = { Text(stringResource(R.string.setup_wg_conf_placeholder)) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 160.dp),
-                                maxLines = 10,
-                                readOnly = privacyMode
-                            )
-                            OutlinedTextField(
-                                value = wgName.redact(privacyMode),
-                                onValueChange = { if (!privacyMode) wgName = it },
-                                label = { Text(stringResource(R.string.wireguard_tunnel_name)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                readOnly = privacyMode
-                            )
-                        }
-                    }
+                    WireGuardConfigCard(
+                        wgConfig = wgConfig,
+                        onWgConfig = { wgConfig = it },
+                        wgName = wgName,
+                        onWgName = { wgName = it },
+                        privacyMode = privacyMode,
+                        onLoadFile = { filePicker.launch("*/*") }
+                    )
 
                     // --- Раздельное туннелирование (модалка как на главном) ---
                     SectionLabel(stringResource(R.string.split_tunnel_title))

@@ -1,0 +1,224 @@
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class
+)
+
+package com.freeturn.app.ui.screens.clientsetup
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.freeturn.app.R
+import com.freeturn.app.data.ClientConfig
+import com.freeturn.app.data.Provider
+import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.components.SettingsContentMaxWidth
+import com.freeturn.app.ui.theme.Spacing
+import com.freeturn.app.viewmodel.ServerViewModel
+import com.freeturn.app.viewmodel.SettingsViewModel
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+
+@Composable
+fun ClientSetupScreen(
+    settingsViewModel: SettingsViewModel,
+    serverViewModel: ServerViewModel,
+    // null = активный сервер; не-null = конкретный сервер по id (Settings-флоу).
+    serverId: String? = null,
+    onBack: (() -> Unit)? = null
+) {
+    val snapshot by settingsViewModel.serversSnapshot.collectAsStateWithLifecycle()
+    val activeClient by settingsViewModel.clientConfig.collectAsStateWithLifecycle()
+    val sshConfig by serverViewModel.sshConfig.collectAsStateWithLifecycle()
+    val serverState by serverViewModel.serverState.collectAsStateWithLifecycle()
+    val activeProxyListen by settingsViewModel.proxyListen.collectAsStateWithLifecycle()
+    val privacyMode by settingsViewModel.privacyMode.collectAsStateWithLifecycle()
+
+    // Источник данных: конкретный сервер по id либо активный.
+    val server = serverId?.let { id -> snapshot.list.firstOrNull { it.id == id } }
+    val saved = server?.client ?: activeClient
+    // Активный сервер рулит живым рантаймом: SSH-сессия, рестарты, sync с сервером.
+    // Для неактивного редактируем только хранимые данные.
+    val isActive = serverId == null || serverId == snapshot.activeId
+    val effSshIp = server?.ssh?.ip ?: sshConfig.ip
+    val effProxyListen = server?.proxyListen ?: activeProxyListen
+
+    // Единая точка записи client-конфига: сервер by-id либо активный.
+    fun clientEdit(transform: (ClientConfig) -> ClientConfig) {
+        if (serverId != null) {
+            settingsViewModel.updateServerClient(serverId, transform)
+        } else {
+            settingsViewModel.saveClientConfig(transform(settingsViewModel.clientConfig.value), snapshot.activeId)
+        }
+    }
+
+    val serverKnown = serverState as? com.freeturn.app.domain.ServerState.Known
+    // TCP-форвард: в sync-режиме у активного сервера берём реальное состояние из probe
+    // (если запущен), иначе — сохранённое значение клиента. Нужно лишь для показа Bond.
+    val syncOn = saved.syncServerSwitches
+    val effectiveTcpForward = if (isActive && syncOn && serverKnown?.running == true)
+        serverKnown.tcpMode ?: saved.tcpForward else saved.tcpForward
+
+    val context = LocalContext.current
+
+    // remember, НЕ rememberSaveable: rememberSaveable восстановил бы stale-поля из
+    // bundle при возврате на экран, и авто-сейв зеркалил бы их в чужой сервер.
+    var serverAddress by remember(saved.serverAddress) { mutableStateOf(saved.serverAddress) }
+    var vkLink       by remember(saved.vkLink)         { mutableStateOf(saved.vkLink) }
+    var threads      by remember(saved.threads)        { mutableFloatStateOf(saved.threads.toFloat()) }
+    var streamsPerCred by remember(saved.streamsPerCred) { mutableFloatStateOf(saved.streamsPerCred.toFloat()) }
+    var localPort    by remember(saved.localPort)      { mutableStateOf(saved.localPort) }
+    var magicTurn by remember(saved.magicTurn) { mutableStateOf(saved.magicTurn) }
+    var customDns by remember(saved.customDns) { mutableStateOf(saved.customDns) }
+
+    // Автозаполнение адреса сервера из SSH-конфига если поле пустое
+    LaunchedEffect(effSshIp, effProxyListen) {
+        if (serverAddress.isBlank() && effSshIp.isNotBlank()) {
+            val port = effProxyListen.substringAfterLast(":", "56000")
+            serverAddress = "$effSshIp:$port"
+        }
+    }
+
+    // Авто-сохранение с дебаунсом 600 мс для текстовых полей и ползунков.
+    // clientEdit пишет по id редактируемого сервера — смена активного за время
+    // дебаунса не затирает чужой конфиг.
+    LaunchedEffect(
+        serverAddress, vkLink, threads, streamsPerCred, localPort, magicTurn, customDns
+    ) {
+        delay(600)
+        clientEdit { current ->
+            current.copy(
+                serverAddress = serverAddress.trim(),
+                vkLink        = vkLink.trim(),
+                threads       = threads.roundToInt(),
+                streamsPerCred = streamsPerCred.roundToInt(),
+                localPort     = localPort.trim(),
+                magicTurn     = magicTurn.trim(),
+                customDns     = customDns.trim()
+            )
+        }
+    }
+
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = { Text(stringResource(R.string.provider_connection_settings)) },
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                painterResource(R.drawable.arrow_back_24px),
+                                contentDescription = stringResource(R.string.back)
+                            )
+                        }
+                    }
+                },
+                scrollBehavior = scrollBehavior
+            )
+        },
+        contentWindowInsets = if (onBack != null) WindowInsets(0, 0, 0, 0) else WindowInsets.navigationBars
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = SettingsContentMaxWidth)
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.lg)
+            ) {
+                ConnectionCard(
+                    serverAddress = serverAddress,
+                    onServerAddress = { serverAddress = it },
+                    showVkLink = saved.provider == Provider.VK,
+                    vkLink = vkLink,
+                    onVkLink = { vkLink = it },
+                    localPort = localPort,
+                    onLocalPort = { localPort = it },
+                    privacyMode = privacyMode
+                )
+
+                PerformanceCard(
+                    threads = threads,
+                    onThreads = { threads = it },
+                    streamsPerCred = streamsPerCred,
+                    onStreamsPerCred = { streamsPerCred = it },
+                    onTick = { HapticUtil.perform(context, HapticUtil.Pattern.SELECTION) }
+                )
+
+                DnsCard(
+                    dnsMode = saved.dnsMode,
+                    onDnsMode = { mode ->
+                        HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
+                        clientEdit { it.copy(dnsMode = mode) }
+                    },
+                    customDns = customDns,
+                    onCustomDns = { customDns = it },
+                    useCarrierDns = saved.useCarrierDns,
+                    onUseCarrierDns = { v -> clientEdit { it.copy(useCarrierDns = v) } }
+                )
+
+                AdvancedSection(
+                    useUdp = saved.useUdp,
+                    onUseUdp = { v ->
+                        HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON)
+                        clientEdit { it.copy(useUdp = v) }
+                    },
+                    manualCaptcha = saved.manualCaptcha,
+                    onManualCaptcha = { v -> clientEdit { it.copy(manualCaptcha = v) } },
+                    showBond = effectiveTcpForward,
+                    bond = saved.bond,
+                    // bond триггерит рестарт прокси только у активного; иначе пишем данные.
+                    onBond = { v -> if (isActive) settingsViewModel.setBond(v) else clientEdit { it.copy(bond = v) } },
+                    magicSwitch = saved.magicSwitch,
+                    onMagicSwitch = { v -> clientEdit { it.copy(magicSwitch = v) } },
+                    magicTurn = magicTurn,
+                    onMagicTurn = { magicTurn = it },
+                    privacyMode = privacyMode
+                )
+
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}

@@ -3,10 +3,9 @@
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class
 )
 
-package com.freeturn.app.ui.screens
+package com.freeturn.app.ui.screens.splittunnel
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -14,27 +13,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularWavyProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,17 +35,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.freeturn.app.R
 import com.freeturn.app.data.SplitTunnelMode
 import com.freeturn.app.ui.HapticUtil
 import com.freeturn.app.ui.components.AppChoice
-import com.freeturn.app.ui.components.AppIcon
 import com.freeturn.app.ui.components.installedInternetApps
 import com.freeturn.app.ui.components.toPackageSet
-import com.freeturn.app.viewmodel.SettingsViewModel
 import com.freeturn.app.ui.theme.Spacing
+import com.freeturn.app.viewmodel.SettingsViewModel
 
 /**
  * Общий модальный лист split-tunneling. Один источник для главного экрана и экрана
@@ -211,6 +197,9 @@ fun SplitTunnelSheetContent(
 /** Горизонтальный отступ контента листа. Совпадает с внутренним паддингом ListItem (M3). */
 private val HorizontalPadding = 16.dp
 
+/** Фиксированная высота области списка — стабильна при загрузке/поиске (нет ресайза листа). */
+private val ListHeight = 360.dp
+
 @Composable
 private fun LockedBanner(modifier: Modifier = Modifier) {
     Surface(
@@ -236,123 +225,3 @@ private fun LockedBanner(modifier: Modifier = Modifier) {
         }
     }
 }
-
-@Composable
-private fun ModeDropdown(
-    mode: String,
-    enabled: Boolean,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    var expanded by remember { mutableStateOf(false) }
-    val options = listOf(
-        SplitTunnelMode.INCLUDE to stringResource(R.string.split_tunnel_mode_include),
-        SplitTunnelMode.EXCLUDE to stringResource(R.string.split_tunnel_mode_exclude)
-    )
-    val current = options.firstOrNull { it.first == mode }?.second.orEmpty()
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { if (enabled) expanded = !expanded },
-        modifier = modifier
-    ) {
-        OutlinedTextField(
-            value = current,
-            onValueChange = {},
-            readOnly = true,
-            enabled = enabled,
-            minLines = 2,
-            label = { Text(stringResource(R.string.split_tunnel_mode_label)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled)
-                .fillMaxWidth()
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (value, label) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        HapticUtil.perform(context, HapticUtil.Pattern.SELECTION)
-                        expanded = false
-                        onSelect(value)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AppList(
-    installed: List<AppChoice>?,
-    selected: Set<String>,
-    query: String,
-    enabled: Boolean,
-    onToggle: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (installed == null) {
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            CircularWavyProgressIndicator()
-        }
-        return
-    }
-
-    // Выбранные пункты поднимаем наверх. Набор фиксируем на момент загрузки списка
-    // (а не на живой `selected`), иначе пункт прыгал бы при каждом тыке чекбокса.
-    // Внутри групп алфавитный порядок сохраняется — installedInternetApps уже
-    // отсортирован, а sortedBy стабильна.
-    val pinned = remember(installed) { selected }
-
-    val filtered = remember(installed, query, pinned) {
-        val base = if (query.isBlank()) installed
-        else installed.filter {
-            it.label.contains(query, ignoreCase = true) ||
-                it.packageName.contains(query, ignoreCase = true)
-        }
-        base.sortedBy { it.packageName !in pinned }
-    }
-
-    if (filtered.isEmpty()) {
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Text(
-                stringResource(R.string.split_tunnel_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        return
-    }
-
-    LazyColumn(modifier = modifier) {
-        items(filtered, key = { it.packageName }) { app ->
-            val checked = app.packageName in selected
-            ListItem(
-                headlineContent = { Text(app.label) },
-                supportingContent = {
-                    Text(app.packageName, style = MaterialTheme.typography.labelSmall)
-                },
-                leadingContent = { AppIcon(app.packageName) },
-                trailingContent = {
-                    Checkbox(
-                        checked = checked,
-                        onCheckedChange = null,
-                        enabled = enabled
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                modifier = Modifier.toggleable(
-                    value = checked,
-                    enabled = enabled,
-                    role = Role.Checkbox,
-                    onValueChange = { onToggle(app.packageName) }
-                )
-            )
-        }
-    }
-}
-
-/** Фиксированная высота области списка — стабильна при загрузке/поиске (нет ресайза листа). */
-private val ListHeight = 360.dp

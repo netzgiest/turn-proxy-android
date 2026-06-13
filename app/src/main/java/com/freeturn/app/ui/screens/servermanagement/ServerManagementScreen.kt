@@ -3,7 +3,7 @@
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class
 )
 
-package com.freeturn.app.ui.screens
+package com.freeturn.app.ui.screens.servermanagement
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -25,10 +25,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import com.freeturn.app.R
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -36,16 +32,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,28 +49,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.delay
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.freeturn.app.R
 import com.freeturn.app.data.ObfProfile
-import com.freeturn.app.ui.HapticUtil
-import com.freeturn.app.ui.components.SectionLabel
-import com.freeturn.app.ui.components.SettingsCard
-import com.freeturn.app.ui.components.SettingsContentMaxWidth
-import com.freeturn.app.ui.components.SettingsControlLabel
-import com.freeturn.app.ui.components.SettingsFieldSlot
-import com.freeturn.app.ui.components.SettingsRowDivider
-import com.freeturn.app.ui.util.copyToClipboard
-import com.freeturn.app.ui.util.redact
 import com.freeturn.app.domain.ServerState
 import com.freeturn.app.domain.SshConnectionState
+import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.components.SettingsContentMaxWidth
+import com.freeturn.app.ui.theme.Spacing
+import com.freeturn.app.ui.util.copyToClipboard
 import com.freeturn.app.viewmodel.ServerViewModel
 import com.freeturn.app.viewmodel.SettingsViewModel
 import com.freeturn.app.viewmodel.serverSettingsAvailable
-import com.freeturn.app.ui.theme.Spacing
+import kotlinx.coroutines.delay
 
 @Composable
 fun ServerManagementScreen(
@@ -98,7 +83,6 @@ fun ServerManagementScreen(
     val isActive = serverId == null || serverId == snapshot.activeId
     val sshState by serverViewModel.sshState.collectAsStateWithLifecycle()
     val serverState by serverViewModel.serverState.collectAsStateWithLifecycle()
-    val sshConfig by serverViewModel.sshConfig.collectAsStateWithLifecycle()
     val activeListen by settingsViewModel.proxyListen.collectAsStateWithLifecycle()
     val activeConnect by settingsViewModel.proxyConnect.collectAsStateWithLifecycle()
     val savedListen = server?.proxyListen ?: activeListen
@@ -308,144 +292,37 @@ fun ServerManagementScreen(
 
                 // --- Серверный конфиг (listen/connect) — SSH-only, скрыт без подключения ---
                 if (isConnected) {
-                    SectionLabel(stringResource(R.string.server_config))
-                    SettingsCard {
-                        SettingsFieldSlot {
-                            OutlinedTextField(
-                                value = proxyListenIp,
-                                onValueChange = { v -> proxyListenIp = v.filter { c -> c.isDigit() || c == '.' || c == ':' } },
-                                label = { Text(stringResource(R.string.listen_ip)) },
-                                placeholder = { Text(stringResource(R.string.listen_ip_placeholder)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                                supportingText = { Text(stringResource(R.string.listen_ip_desc)) }
-                            )
-                        }
-                        SettingsRowDivider()
-                        SettingsFieldSlot {
-                            OutlinedTextField(
-                                value = proxyListenPort,
-                                onValueChange = { proxyListenPort = it.filter { c -> c.isDigit() } },
-                                label = { Text(stringResource(R.string.listen_port)) },
-                                placeholder = { Text(stringResource(R.string.listen_port_placeholder)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                supportingText = { Text(stringResource(R.string.listen_port_desc)) }
-                            )
-                        }
-                        SettingsRowDivider()
-                        SettingsFieldSlot {
-                            OutlinedTextField(
-                                value = proxyConnect,
-                                onValueChange = { proxyConnect = it },
-                                label = { Text(stringResource(R.string.turn_client_address)) },
-                                placeholder = { Text(stringResource(R.string.turn_client_placeholder)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                                supportingText = { Text(stringResource(R.string.turn_client_desc)) }
-                            )
-                        }
-                    }
+                    ServerConfigCard(
+                        listenIp = proxyListenIp,
+                        onListenIp = { proxyListenIp = it },
+                        listenPort = proxyListenPort,
+                        onListenPort = { proxyListenPort = it },
+                        connect = proxyConnect,
+                        onConnect = { proxyConnect = it }
+                    )
                 }
 
                 // --- Синхронные настройки (apply-модель) ---
                 // Гейт общий со входом в экран (ServerDetailScreen) — serverSettingsAvailable.
                 if (serverSettingsAvailable(isConnected, syncOn)) {
-                    SectionLabel(stringResource(R.string.server_sync_section))
-                    SettingsCard {
-                        // Проброс: UDP / TCP.
-                        SettingsFieldSlot {
-                            SettingsControlLabel(stringResource(R.string.tcp_forward_mode))
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                SegmentedButton(
-                                    selected = !tcpDraft,
-                                    onClick = { HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON); tcpDraft = false },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                                ) { Text(stringResource(R.string.udp)) }
-                                SegmentedButton(
-                                    selected = tcpDraft,
-                                    onClick = { HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON); tcpDraft = true },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                                ) { Text(stringResource(R.string.tcp)) }
-                            }
+                    ServerSyncCard(
+                        tcp = tcpDraft,
+                        onTcp = { HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON); tcpDraft = it },
+                        obfProfile = obfDraft,
+                        onObfProfile = { HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON); obfDraft = it },
+                        keyDraft = keyDraft,
+                        onKeyDraft = { keyDraft = it },
+                        savedObfKey = effServer.obfKey,
+                        privacyMode = privacyMode,
+                        onCopyKey = {
+                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                            context.copyToClipboard("obf-key", effServer.obfKey, sensitive = true)
+                        },
+                        onRegenKey = {
+                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                            keyDraft = ObfProfile.generateKey()
                         }
-                        SettingsRowDivider()
-                        // Профиль обфускации.
-                        SettingsFieldSlot {
-                            SettingsControlLabel(stringResource(R.string.obf_profile_title))
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                ObfProfile.ALL.forEachIndexed { idx, value ->
-                                    SegmentedButton(
-                                        selected = obfDraft == value,
-                                        onClick = { HapticUtil.perform(context, HapticUtil.Pattern.TOGGLE_ON); obfDraft = value },
-                                        shape = SegmentedButtonDefaults.itemShape(index = idx, count = ObfProfile.ALL.size)
-                                    ) { Text(obfProfileLabel(value)) }
-                                }
-                            }
-                        }
-                        SettingsRowDivider()
-                        // obf-ключ (черновик); регенерация лишь заполняет черновик —
-                        // рестарт случится по общей кнопке «Применить».
-                        if (obfDraft != ObfProfile.NONE) {
-                            SettingsFieldSlot {
-                                OutlinedTextField(
-                                    value = if (privacyMode) effServer.obfKey.redact(true) else keyDraft,
-                                    onValueChange = { if (!privacyMode) keyDraft = it },
-                                    label = { Text(stringResource(R.string.server_obf_key_label)) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    readOnly = privacyMode,
-                                    singleLine = true,
-                                    isError = keyDraft.isNotBlank() && !ObfProfile.isValidKey(keyDraft),
-                                    trailingIcon = {
-                                        if (effServer.obfKey.isNotBlank() && !privacyMode) {
-                                            IconButton(onClick = {
-                                                HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                                                context.copyToClipboard("obf-key", effServer.obfKey, sensitive = true)
-                                            }) {
-                                                Icon(
-                                                    painterResource(R.drawable.content_copy_24px),
-                                                    contentDescription = stringResource(R.string.copy)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    supportingText = {
-                                        when {
-                                            keyDraft.isBlank() -> Text(stringResource(R.string.obf_key_empty_hint))
-                                            !ObfProfile.isValidKey(keyDraft) -> Text(
-                                                stringResource(R.string.obf_key_invalid_hint),
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                    }
-                                )
-                                if (!privacyMode) {
-                                    TextButton(
-                                        onClick = {
-                                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
-                                            keyDraft = ObfProfile.generateKey()
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(stringResource(R.string.obf_key_regen))
-                                    }
-                                }
-                            }
-                        } else {
-                            // obfDraft == NONE — подсказка выбрать профиль.
-                            SettingsFieldSlot {
-                                Text(
-                                    stringResource(R.string.obf_select_profile_hint),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
+                    )
                 }
 
                 // Клиренс под плавающую кнопку, чтобы FAB не перекрывал нижний контент.
@@ -453,53 +330,4 @@ fun ServerManagementScreen(
             }
         }
     }
-}
-
-/**
- * Hero-карточка состояния (неактивный сервер / потеря связи): тональный контейнер,
- * центрированная иконка + заголовок + пояснение + основная кнопка. Один источник стиля
- * для пустых/аварийных состояний экрана.
- */
-@Composable
-private fun HeroCard(
-    iconRes: Int,
-    title: String,
-    desc: String,
-    actionLabel: String,
-    onAction: () -> Unit,
-    iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
-    descTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant
-) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(Spacing.xxl),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spacing.lg)
-        ) {
-            Icon(painterResource(iconRes), contentDescription = null, tint = iconTint)
-            Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-            Text(
-                desc,
-                style = MaterialTheme.typography.bodyMedium,
-                color = descTint,
-                textAlign = TextAlign.Center
-            )
-            Button(
-                onClick = onAction,
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.large
-            ) { Text(actionLabel) }
-        }
-    }
-}
-
-@Composable
-private fun obfProfileLabel(value: String): String = when (value) {
-    ObfProfile.NONE -> stringResource(R.string.obf_none)
-    ObfProfile.RTPOPUS -> stringResource(R.string.obf_rtpopus)
-    else -> value
 }
