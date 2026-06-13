@@ -2,35 +2,25 @@
 
 package com.freeturn.app.ui.components
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -39,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import com.freeturn.app.R
 import com.freeturn.app.data.SshConfig
 import com.freeturn.app.ui.util.HapticUtil
-import com.freeturn.app.ui.theme.Spacing
 
 /**
  * Поля SSH-формы: адрес/порт + аутентификация (логин, способ входа, секрет).
@@ -186,29 +175,6 @@ fun SshFormFields(
                     maxLines = 10
                 )
             }
-        }
-    }
-}
-
-/** Тональная карточка ошибки (errorContainer) — единый вид для SSH-форм. */
-@Composable
-fun InlineErrorCard(message: String) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.errorContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            // TalkBack озвучивает появившуюся ошибку без переноса фокуса.
-            .semantics { liveRegion = LiveRegionMode.Polite }
-    ) {
-        Row(modifier = Modifier.padding(Spacing.lg), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.error_24px), null, tint = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.width(12.dp))
-            Text(
-                message,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodyMedium
-            )
         }
     }
 }

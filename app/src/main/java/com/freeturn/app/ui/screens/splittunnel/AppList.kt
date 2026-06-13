@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import com.freeturn.app.R
-import com.freeturn.app.ui.components.AppChoice
+import com.freeturn.app.data.AppChoice
 import com.freeturn.app.ui.components.AppIcon
 
 /** Список приложений с иконками/чекбоксами: загрузка, поиск, пустое состояние. */
