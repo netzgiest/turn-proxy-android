@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.freeturn.app.ProxyService
-import com.freeturn.app.ProxyServiceState
 import com.freeturn.app.data.AppPreferences
 import com.freeturn.app.data.ClientConfig
 import com.freeturn.app.data.ObfProfile
@@ -16,6 +14,8 @@ import com.freeturn.app.domain.LocalProxyManager
 import com.freeturn.app.domain.ProxyOrchestrator
 import com.freeturn.app.domain.SshRepository
 import com.freeturn.app.domain.UpdateState
+import com.freeturn.app.proxy.ProxyService
+import com.freeturn.app.proxy.ProxyServiceState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay

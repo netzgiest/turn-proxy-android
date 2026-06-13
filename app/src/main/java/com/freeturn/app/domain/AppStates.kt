@@ -40,6 +40,30 @@ sealed class ProxyState {
     data class CaptchaRequired(val url: String, val sessionId: Long = 0L) : ProxyState()
 }
 
+// Результат старта прокси-сервиса (мост ProxyService → ProxyViewModel).
+sealed class StartupResult {
+    data object Success : StartupResult()
+    data class Failed(val message: String) : StartupResult()
+}
+
+/**
+ * Сессия ручной капчи. sessionId позволяет диалогу различать соседние
+ * капча-сессии с одинаковым URL и пересоздавать WebView через `key(sessionId)`.
+ */
+data class CaptchaSession(val url: String, val sessionId: Long)
+
+/**
+ * Агрегированная статистика подключений прокси-ядра.
+ *
+ * - [active] — число реально живых каналов (DTLS-потоков для udp-релея, smux-сессий для tcp-режима).
+ * - [total]  — целевое число каналов. 0 означает «ещё неизвестно» (tcp-режим до первой waiting-строки).
+ */
+data class ConnectionStats(val active: Int, val total: Int) {
+    companion object {
+        val IDLE = ConnectionStats(0, 0)
+    }
+}
+
 // App update states
 sealed class UpdateState {
     object Idle : UpdateState()

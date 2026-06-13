@@ -1,8 +1,9 @@
-package com.freeturn.app
+package com.freeturn.app.proxy
 
 import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import com.freeturn.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,12 +35,12 @@ class ProxyTileService : TileService() {
         super.onClick()
         if (isProxyRunning) {
             val intent = Intent(this, ProxyReceiver::class.java).apply {
-                action = "com.freeturn.app.STOP_PROXY"
+                action = ProxyActions.STOP
             }
             sendBroadcast(intent)
         } else {
             val intent = Intent(this, ProxyReceiver::class.java).apply {
-                action = "com.freeturn.app.START_PROXY"
+                action = ProxyActions.START
             }
             sendBroadcast(intent)
         }

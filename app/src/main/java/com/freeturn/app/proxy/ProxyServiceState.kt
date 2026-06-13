@@ -1,5 +1,8 @@
-package com.freeturn.app
+package com.freeturn.app.proxy
 
+import com.freeturn.app.domain.CaptchaSession
+import com.freeturn.app.domain.ConnectionStats
+import com.freeturn.app.domain.StartupResult
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -7,24 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-
-/**
- * Сессия ручной капчи. sessionId позволяет диалогу различать соседние
- * капча-сессии с одинаковым URL и пересоздавать WebView через `key(sessionId)`.
- */
-data class CaptchaSession(val url: String, val sessionId: Long)
-
-/**
- * Агрегированная статистика подключений прокси-ядра.
- *
- * - [active] — число реально живых каналов (DTLS-потоков для udp-релея, smux-сессий для tcp-режима).
- * - [total]  — целевое число каналов. 0 означает «ещё неизвестно» (tcp-режим до первой waiting-строки).
- */
-data class ConnectionStats(val active: Int, val total: Int) {
-    companion object {
-        val IDLE = ConnectionStats(0, 0)
-    }
-}
 
 /**
  * Централизованное состояние прокси-сервиса.

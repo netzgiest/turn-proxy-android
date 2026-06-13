@@ -315,6 +315,10 @@
     <string name="notif_channel_captcha">Капча</string>
     <string name="notif_captcha_title">Требуется прохождение капчи</string>
     <string name="notif_captcha_text">Откройте приложение для проверки</string>
+    <string name="notif_proxy_connect_error">Ошибка подключения</string>
+    <string name="notif_proxy_wireguard_error">Ошибка WireGuard</string>
+    <string name="notif_proxy_network_change">Смена сети, переподключение…</string>
+    <string name="notif_proxy_reconnecting">Переподключение (%1$d/%2$d)…</string>
 
     <!-- CaptchaWebViewDialog -->
     <string name="captcha_title">Проверка VK</string>

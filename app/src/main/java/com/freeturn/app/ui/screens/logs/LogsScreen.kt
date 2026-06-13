@@ -128,22 +128,27 @@ fun LogsScreen(proxyViewModel: ProxyViewModel) {
 @Composable
 private fun LogLine(line: String) {
     val lower = line.lowercase()
-    val isHeader = line.startsWith("===")
     val isError = lower.contains("ошибка") || lower.contains("error") ||
                   lower.contains("критическая") || lower.contains("failed") ||
-                  lower.contains("fatal") || lower.contains("panic")
+                  lower.contains("fatal") || lower.contains("panic") ||
+                  lower.contains("не удалось")
     val isWarning = lower.contains("watchdog") || lower.contains("перезапуск") ||
+                    lower.contains("переподключение") || lower.contains("квота") ||
                     lower.contains("quota") || lower.contains("warn") ||
-                    lower.contains(">>>")
+                    lower.contains("недоступна")
     val isSuccess = lower.contains("запущен") || lower.contains("подключен") ||
                     lower.contains("success") || lower.contains("started") ||
-                    lower.contains("ok")
+                    lower.contains("established")
+    // Ключевые события сессии — выделяем акцентом (прежде маркировались "===").
+    val isEvent = lower.contains("запуск прокси") || lower.contains("остановка") ||
+                  lower.contains("процесс остановлен") || lower.contains("сессия завершена") ||
+                  lower.contains("быстрый выход") || lower.startsWith("сеть:")
 
     val textColor = when {
         isError   -> MaterialTheme.colorScheme.error
         isWarning -> MaterialTheme.extendedColorScheme.warning
         isSuccess -> MaterialTheme.extendedColorScheme.success
-        isHeader  -> MaterialTheme.colorScheme.primary
+        isEvent   -> MaterialTheme.colorScheme.primary
         else      -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(
@@ -152,7 +157,7 @@ private fun LogLine(line: String) {
             .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
         verticalAlignment = Alignment.Top
     ) {
-        if (isHeader || isError || isWarning || isSuccess) {
+        if (isEvent || isError || isWarning || isSuccess) {
             Box(
                 modifier = Modifier
                     .padding(top = Spacing.xs, end = Spacing.sm)
@@ -166,7 +171,7 @@ private fun LogLine(line: String) {
             text = line,
             style = MaterialTheme.typography.bodySmall.copy(
                 fontFamily = FontFamily.Monospace,
-                fontWeight = if (isHeader) FontWeight.SemiBold else FontWeight.Normal
+                fontWeight = if (isEvent) FontWeight.SemiBold else FontWeight.Normal
             ),
             color = textColor
         )

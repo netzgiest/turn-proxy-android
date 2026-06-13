@@ -3,11 +3,10 @@ package com.freeturn.app.domain
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import com.freeturn.app.ConnectionStats
-import com.freeturn.app.ProxyService
-import com.freeturn.app.ProxyServiceState
-import com.freeturn.app.StartupResult
 import com.freeturn.app.data.ClientConfig
+import com.freeturn.app.proxy.CoreProcessController
+import com.freeturn.app.proxy.ProxyService
+import com.freeturn.app.proxy.ProxyServiceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +42,7 @@ class LocalProxyManager(private val context: Context) {
 
     private suspend fun observeProxyLifecycle() {
         ProxyServiceState.proxyFailed.collect {
-            setErrorWithAutoReset("Прокси упал ${ProxyService.MAX_RESTARTS} раз — проверьте настройки")
+            setErrorWithAutoReset("Прокси упал ${CoreProcessController.MAX_RESTARTS} раз — проверьте настройки")
         }
     }
 
