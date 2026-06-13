@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.freeturn.app.R
 import com.freeturn.app.data.ObfProfile
 import com.freeturn.app.data.share.ShareInfo
-import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.util.HapticUtil
 import com.freeturn.app.ui.components.QrCode
 import com.freeturn.app.ui.theme.LocalReducedMotion
 import com.freeturn.app.ui.util.copyToClipboard

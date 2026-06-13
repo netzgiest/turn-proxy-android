@@ -13,7 +13,7 @@ import com.freeturn.app.data.TunnelTransport
 import com.freeturn.app.domain.ProxyOrchestrator
 import com.freeturn.app.domain.ServerSetupRepository
 import com.freeturn.app.domain.server.ServerOptions
-import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.util.HapticUtil
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow

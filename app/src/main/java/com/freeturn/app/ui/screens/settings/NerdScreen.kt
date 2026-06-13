@@ -42,7 +42,7 @@ import com.freeturn.app.data.ObfProfile
 import com.freeturn.app.data.Server
 import com.freeturn.app.domain.server.ServerCommand
 import com.freeturn.app.domain.server.ServerOptions
-import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.util.HapticUtil
 import com.freeturn.app.ui.components.SettingsBackButton
 import com.freeturn.app.ui.components.SettingsContentMaxWidth
 import com.freeturn.app.ui.components.SettingsGroup

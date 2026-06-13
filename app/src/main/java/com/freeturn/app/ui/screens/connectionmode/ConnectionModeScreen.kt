@@ -51,7 +51,7 @@ import com.freeturn.app.R
 import com.freeturn.app.data.ClientConfig
 import com.freeturn.app.data.TunnelTransport
 import com.freeturn.app.domain.ProxyState
-import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.util.HapticUtil
 import com.freeturn.app.ui.components.SectionLabel
 import com.freeturn.app.ui.components.SettingsCard
 import com.freeturn.app.ui.components.SettingsContentMaxWidth

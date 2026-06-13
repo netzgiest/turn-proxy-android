@@ -12,7 +12,7 @@ import com.freeturn.app.data.SshConfig
 import com.freeturn.app.data.TunnelTransport
 import com.freeturn.app.data.share.FreeturnLink
 import com.freeturn.app.domain.LinkImportBus
-import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.util.HapticUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -1,4 +1,4 @@
-package com.freeturn.app.ui
+package com.freeturn.app.ui.util
 
 import android.content.Context
 import android.os.Build
@@ -6,11 +6,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
 
-/**
- * Apple-like haptic patterns for a tactile, musical feel.
- * Each pattern mimics iPhone Taptic Engine characteristics:
- * short snappy pulses, harmonic cascades, ascending/descending amplitudes.
- */
+/** Тактильные вибро-паттерны для UI-событий: выбор, клик, тоггл, успех/ошибка, старт. */
 object HapticUtil {
 
     enum class Pattern {
@@ -71,7 +67,6 @@ object HapticUtil {
                     -1
                 )
 
-                // Музыкальная вибрация
                 Pattern.LAUNCH -> VibrationEffect.createWaveform(
                     longArrayOf(
                         0L,

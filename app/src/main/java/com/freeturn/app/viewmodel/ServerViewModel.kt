@@ -11,7 +11,7 @@ import com.freeturn.app.domain.ProxyOrchestrator
 import com.freeturn.app.domain.ServerState
 import com.freeturn.app.domain.SshConnectionState
 import com.freeturn.app.domain.SshRepository
-import com.freeturn.app.ui.HapticUtil
+import com.freeturn.app.ui.util.HapticUtil
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
