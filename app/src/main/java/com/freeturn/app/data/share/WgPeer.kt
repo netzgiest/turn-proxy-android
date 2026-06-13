@@ -16,25 +16,6 @@ data class WgPeer(
     val isSelf: Boolean
 )
 
-/** Гость из allowlist без WG-пира (`client-list`): доступ при tcp/Xray-бэкенде. */
-data class SharedClient(
-    val clientId: String,
-    /** Имя = comment в clients.json. */
-    val name: String
-)
-
-/** Разбор KEY=VALUE-вывода `client-list`: CLIENT_COUNT, CLIENT_<i>_ID/_NAME_B64. */
-object SharedClientParser {
-
-    fun parse(kv: Map<String, String>): List<SharedClient> {
-        val count = kv["CLIENT_COUNT"]?.toIntOrNull() ?: 0
-        return (0 until count).mapNotNull { i ->
-            val id = kv["CLIENT_${i}_ID"]?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            SharedClient(clientId = id, name = decodeNameB64(kv["CLIENT_${i}_NAME_B64"]))
-        }
-    }
-}
-
 /**
  * Разбор KEY=VALUE-вывода `peer-list`: PEER_COUNT, PEER_<i>_PUB/_NAME_B64/_IP/
  * _HS/_CONF, SELF_PUB.
@@ -58,8 +39,8 @@ object WgPeerParser {
     }
 }
 
-/** base64(UTF-8) -> имя; битое значение -> пусто. */
-private fun decodeNameB64(b64: String?): String {
+/** base64(UTF-8) -> имя; битое значение -> пусто. Общий хелпер парсеров share-вывода. */
+internal fun decodeNameB64(b64: String?): String {
     if (b64.isNullOrBlank()) return ""
     return try {
         String(Base64.getDecoder().decode(b64), Charsets.UTF_8)
