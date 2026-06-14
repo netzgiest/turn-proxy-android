@@ -52,7 +52,7 @@
 | Автоустановка | Бинарник на VPS разворачивается из приложения одним нажатием |
 | Автообновление | Проверка новых релизов и установка APK без ручного скачивания |
 | Watchdog | Автопереподключение при обрыве и смене Wi-Fi / Mobile |
-| Шифрование секретов | Пароли, ключи и wrap-key в EncryptedSharedPreferences (Android Keystore) |
+| Экспорт/импорт | Резервная копия профилей в зашифрованный паролем файл (PBKDF2 + AES-GCM) |
 | Broadcast API | `START_PROXY` / `STOP_PROXY` для автоматизации |
 | Кастомное ядро | Подмена встроенного `libvkturn.so` |
 
@@ -179,7 +179,7 @@ adb shell am broadcast -a com.freeturn.app.STOP_PROXY  -n com.freeturn.app/.Prox
 - **Kotlin** + **Jetpack Compose** + **Material 3**
 - **Coroutines / StateFlow** — реактивная архитектура
 - **DataStore** — настройки и профили
-- **EncryptedSharedPreferences** + **Android Keystore** — секреты
+- **BouncyCastle** — крипто (SSH KEX, шифрование бэкапа паролем)
 - **JSch** — SSH-клиент
 - Нативное ядро на **Go** — `libvkturn.so` (arm64-v8a)
 
