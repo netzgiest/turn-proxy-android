@@ -2,7 +2,10 @@ package com.freeturn.app.domain.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
+import android.os.Build
 import androidx.core.content.FileProvider
 import com.freeturn.app.domain.UpdateState
 import kotlinx.coroutines.CancellationException
@@ -15,6 +18,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 class AppUpdater(private val context: Context) {
 
@@ -109,6 +113,13 @@ class AppUpdater(private val context: Context) {
                     connection.disconnect()
                 }
             }
+            // Чужая подпись = подмена (MITM на CDN-редиректе/компрометация релиза).
+            val trusted = withContext(Dispatchers.IO) { isSignedBySameCert(apkFile) }
+            if (!trusted) {
+                apkFile.delete()
+                _state.value = UpdateState.Error("Подпись обновления не совпадает - установка отменена")
+                return
+            }
             _state.value = UpdateState.ReadyToInstall
         } catch (e: CancellationException) {
             apkFile.delete()
@@ -154,6 +165,39 @@ class AppUpdater(private val context: Context) {
         } finally {
             connection.disconnect()
         }
+    }
+
+    /** [apk] подписан тем же сертификатом и тем же packageName, что установленное приложение. */
+    @Suppress("DEPRECATION")
+    private fun isSignedBySameCert(apk: File): Boolean = try {
+        val pm = context.packageManager
+        val flag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        val archive = pm.getPackageArchiveInfo(apk.absolutePath, flag)
+        val installed = pm.getPackageInfo(context.packageName, flag)
+        val downloadedSigs = signatureHashes(archive)
+        val installedSigs = signatureHashes(installed)
+        archive?.packageName == context.packageName &&
+            downloadedSigs.isNotEmpty() &&
+            downloadedSigs == installedSigs
+    } catch (_: Exception) {
+        false
+    }
+
+    @Suppress("DEPRECATION")
+    private fun signatureHashes(info: PackageInfo?): Set<String> {
+        if (info == null) return emptySet()
+        val sigs: Array<Signature>? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signingInfo = info.signingInfo ?: return emptySet()
+            if (signingInfo.hasMultipleSigners()) signingInfo.apkContentsSigners
+            else signingInfo.signingCertificateHistory
+        } else {
+            info.signatures
+        }
+        return sigs.orEmpty().map { sig ->
+            MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        }.toSet()
     }
 
     private fun findApkUrl(release: JSONObject): String? {
