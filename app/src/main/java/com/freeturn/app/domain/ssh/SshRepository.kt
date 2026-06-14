@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -21,6 +23,9 @@ class SshRepository(
     private val sshManager: SSHManager = SSHManager(),
     private val serverControl: ServerControl = ServerControl(context, sshManager)
 ) {
+
+    // Параллельные команды на одном SSHManager затирали бы fingerprint/_serverState.
+    private val mutex = Mutex()
 
     var activeSshConfig: SshConfig? = null
         private set
@@ -89,16 +94,16 @@ class SshRepository(
         return result
     }
 
-    suspend fun connectSsh(config: SshConfig): Pair<Boolean, String?> {
+    suspend fun connectSsh(config: SshConfig): Pair<Boolean, String?> = mutex.withLock {
         _sshState.value = SshConnectionState.Connecting
         val result = runEcho(config)
         // Сравниваем построчно, а не весь вывод: серверный MOTD/banner или строки
         // из .bashrc могут попасть в stdout перед "OK" и сломать строгое равенство.
-        return if (result.lines().any { it.trim() == "OK" }) {
+        if (result.lines().any { it.trim() == "OK" }) {
             val fp = sshManager.lastSeenFingerprint ?: config.hostFingerprint
             activeSshConfig = config.copy(hostFingerprint = fp)
             _sshState.value = SshConnectionState.Connected(config.ip)
-            checkServerState(config)
+            checkServerStateLocked(config, silent = false)
             Pair(true, sshManager.lastSeenFingerprint)
         } else {
             _sshState.value = SshConnectionState.Error(result.removePrefix("ERROR: "))
@@ -117,7 +122,10 @@ class SshRepository(
      * после действия (стоп/старт/установка): иначе хаб моргает Working -> "Подключение" -> Online.
      * При silent текущий Working держится до прихода [ServerState.Known].
      */
-    suspend fun checkServerState(config: SshConfig? = null, silent: Boolean = false) {
+    suspend fun checkServerState(config: SshConfig? = null, silent: Boolean = false) =
+        mutex.withLock { checkServerStateLocked(config, silent) }
+
+    private suspend fun checkServerStateLocked(config: SshConfig?, silent: Boolean) {
         val cfg = config ?: activeSshConfig ?: return
         if (cfg.ip.isEmpty()) {
             _serverState.value = ServerState.Unknown
@@ -146,12 +154,12 @@ class SshRepository(
     }
 
     /** Идемпотентная установка: скрипт сам решает, скачивать или нет (по sha256). */
-    suspend fun installServer(): InstallResult {
-        val cfg = activeSshConfig ?: return InstallResult.Failed("not connected")
-        if (cfg.ip.isEmpty()) return InstallResult.Failed("no SSH config")
+    suspend fun installServer(): InstallResult = mutex.withLock {
+        val cfg = activeSshConfig ?: return@withLock InstallResult.Failed("not connected")
+        if (cfg.ip.isEmpty()) return@withLock InstallResult.Failed("no SSH config")
         _serverState.value = ServerState.Working("Установка free-turn-proxy...")
 
-        return when (val result = runCmd(cfg, "Установка", ServerCommand.Install)) {
+        when (val result = runCmd(cfg, "Установка", ServerCommand.Install)) {
             is CmdResult.Err -> {
                 _serverState.value = ServerState.Error(result.message)
                 InstallResult.Failed(result.message)
@@ -171,7 +179,7 @@ class SshRepository(
                     // VM решает, как стартовать (с актуальными prefs).
                 }
                 delay(300)
-                checkServerState(cfg, silent = true)
+                checkServerStateLocked(cfg, silent = true)
                 InstallResult.Success(stage = stage, version = version, needsRestart = needsRestart)
             }
         }
@@ -184,9 +192,9 @@ class SshRepository(
         obfProfile: String = "none",
         obfKey: String = "",
         clientId: String = ""
-    ): Boolean {
-        val cfg = activeSshConfig ?: return false
-        if (cfg.ip.isEmpty()) return false
+    ): Boolean = mutex.withLock {
+        val cfg = activeSshConfig ?: return@withLock false
+        if (cfg.ip.isEmpty()) return@withLock false
 
         _serverState.value = ServerState.Working("Запуск сервера...")
         val result = runCmd(
@@ -204,37 +212,38 @@ class SshRepository(
         )
         if (result is CmdResult.Err) {
             _serverState.value = ServerState.Error(result.message)
-            return false
+            return@withLock false
         }
         delay(1500)
-        checkServerState(cfg, silent = true)
-        return true
+        checkServerStateLocked(cfg, silent = true)
+        true
     }
 
-    suspend fun stopServer() {
-        val cfg = activeSshConfig ?: return
-        if (cfg.ip.isEmpty()) return
+    suspend fun stopServer() = mutex.withLock {
+        val cfg = activeSshConfig ?: return@withLock
+        if (cfg.ip.isEmpty()) return@withLock
         _serverState.value = ServerState.Working("Остановка сервера...")
 
         val result = runCmd(cfg, "Остановка", ServerCommand.Stop)
         if (result is CmdResult.Err) {
             _serverState.value = ServerState.Error(result.message)
-            return
+            return@withLock
         }
         delay(1000)
-        checkServerState(cfg, silent = true)
+        checkServerStateLocked(cfg, silent = true)
     }
 
     /** Тянет server.log по SSH. Вывод (и ошибки) пишутся в общий sshLog через runCmd. */
-    suspend fun fetchServerLogs(lines: Int = 200) {
-        val cfg = activeSshConfig ?: return
-        if (cfg.ip.isEmpty()) return
+    suspend fun fetchServerLogs(lines: Int = 200) = mutex.withLock {
+        val cfg = activeSshConfig ?: return@withLock
+        if (cfg.ip.isEmpty()) return@withLock
         _logsLoading.value = true
         try {
             runCmd(cfg, "server.log", ServerCommand.FetchLogs(lines))
         } finally {
             _logsLoading.value = false
         }
+        Unit
     }
 
     fun updateServerState(state: ServerState) {
