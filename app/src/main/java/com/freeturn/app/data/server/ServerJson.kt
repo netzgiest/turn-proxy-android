@@ -1,5 +1,6 @@
 package com.freeturn.app.data.server
 
+import com.freeturn.app.data.config.Browser
 import com.freeturn.app.data.config.ClientConfig
 import com.freeturn.app.data.config.DnsMode
 import com.freeturn.app.data.config.ObfProfile
@@ -49,6 +50,7 @@ internal object ServerJson {
             put("streamsPerCred", p.client.streamsPerCred)
             put("useUdp", p.client.useUdp)
             put("manualCaptcha", p.client.manualCaptcha)
+            put("browser", p.client.browser)
             put("localPort", p.client.localPort)
             put("isRawMode", p.client.isRawMode)
             put("rawCommand", p.client.rawCommand)
@@ -105,6 +107,9 @@ internal object ServerJson {
                 streamsPerCred = cliO.optInt("streamsPerCred", 6),
                 useUdp = cliO.optBoolean("useUdp", false),
                 manualCaptcha = cliO.optBoolean("manualCaptcha", false),
+                browser = cliO.optString("browser", Browser.FIREFOX).let {
+                    if (it in Browser.VALUES) it else Browser.FIREFOX
+                },
                 localPort = cliO.optString("localPort", ClientConfig.DEFAULT_LOCAL_PORT),
                 isRawMode = cliO.optBoolean("isRawMode", false),
                 rawCommand = cliO.optString("rawCommand"),

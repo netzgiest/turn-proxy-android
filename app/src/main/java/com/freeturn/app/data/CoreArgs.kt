@@ -1,5 +1,6 @@
 package com.freeturn.app.data
 
+import com.freeturn.app.data.config.Browser
 import com.freeturn.app.data.config.ClientConfig
 import com.freeturn.app.data.config.DnsMode
 import com.freeturn.app.data.config.ObfProfile
@@ -40,6 +41,8 @@ CoreArgs {
             add("-obf-key"); add(srv.obfKey)
         }
         if (cfg.manualCaptcha) add("-manual-captcha")
+        // -browser: профиль VK-auth, только vk. firefox - дефолт ядра (не шлём), chrome - escape-hatch.
+        if (cfg.provider == Provider.VK && cfg.browser == Browser.CHROME) { add("-browser"); add(Browser.CHROME) }
         if (cfg.debugMode) add("-debug")
         // Ручной список DNS имеет приоритет над DNS оператора.
         val manualDns = DnsList.normalize(cfg.customDns)

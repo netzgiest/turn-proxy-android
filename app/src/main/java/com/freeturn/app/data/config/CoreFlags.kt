@@ -15,6 +15,13 @@ object Provider {
     val VALUES = listOf(VK)
 }
 
+/** Браузерный профиль VK-авторизации (флаг -browser ядра): TLS JA3 + User-Agent. Client-only, в freeturn:// не передаётся. */
+object Browser {
+    const val FIREFOX = "firefox"
+    const val CHROME = "chrome"
+    val VALUES = listOf(FIREFOX, CHROME)
+}
+
 /** Wire-профиль обфускации payload (флаг -obf-profile ядра). Должен совпадать с сервером. */
 object ObfProfile {
     const val NONE = "none"

@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.freeturn.app.R
+import com.freeturn.app.data.config.Browser
 import com.freeturn.app.ui.components.SectionLabel
 import com.freeturn.app.ui.components.SettingsCard
 import com.freeturn.app.ui.components.SettingsControlLabel
@@ -24,7 +25,8 @@ import com.freeturn.app.ui.util.redact
 
 /**
  * "Дополнительно": транспорт TURN (tcp/udp, ортогонален режиму туннеля), сегментированная
- * группа свитчей (капча + bond - bond только в TCP-режиме), альтернативный TURN-узел.
+ * группа свитчей (капча + bond - bond только в TCP-режиме), браузер VK-авторизации,
+ * альтернативный TURN-узел.
  */
 @Composable
 internal fun AdvancedSection(
@@ -32,6 +34,8 @@ internal fun AdvancedSection(
     onUseUdp: (Boolean) -> Unit,
     manualCaptcha: Boolean,
     onManualCaptcha: (Boolean) -> Unit,
+    browser: String,
+    onBrowser: (String) -> Unit,
     showBond: Boolean,
     bond: Boolean,
     onBond: (Boolean) -> Unit,
@@ -84,6 +88,28 @@ internal fun AdvancedSection(
                     checked = bond,
                     onCheckedChange = onBond
                 )
+            }
+        }
+    }
+
+    // Браузерный профиль VK-авторизации (-browser): firefox (дефолт) | chrome (escape-hatch).
+    SettingsCard {
+        SettingsFieldSlot {
+            SettingsControlLabel(
+                title = stringResource(R.string.client_browser_title),
+                desc = stringResource(R.string.client_browser_desc)
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = browser == Browser.FIREFOX,
+                    onClick = { onBrowser(Browser.FIREFOX) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                ) { Text(stringResource(R.string.browser_firefox)) }
+                SegmentedButton(
+                    selected = browser == Browser.CHROME,
+                    onClick = { onBrowser(Browser.CHROME) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                ) { Text(stringResource(R.string.browser_chrome)) }
             }
         }
     }
