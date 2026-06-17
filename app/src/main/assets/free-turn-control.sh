@@ -372,8 +372,10 @@ cmd_install() {
         log "downloading $name @ $ver"
         tmp=$(mktemp "$bin.XXXXXX" 2>/dev/null) || tmp="$bin.new.$$"
         if ! _dl "$asset_url" "$tmp"; then
-            rm -f "$tmp"
-            die "binary download failed"
+            if ! _dl "$latest_url" "$tmp"; then
+                rm -f "$tmp"
+                die "binary download failed"
+            fi
         fi
         # sanity-check: GitHub отдаёт HTML-404 при отсутствии ассета.
         local size
