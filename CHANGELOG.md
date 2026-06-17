@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.1
+
+### Fixes
+
+- Установка не падает с `binary download failed`: загрузка по тегу при несовпадении Location откатывается на latest-URL (`ea1421c`)
+- Бамп ядра 1.3.1 (`7a0e2fd`)
+
 ## 3.1.0
 
 ### Features
