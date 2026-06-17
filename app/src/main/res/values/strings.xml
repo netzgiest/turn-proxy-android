@@ -183,6 +183,9 @@
     <string name="call_link_label">Ссылка на звонок</string>
     <string name="call_link_placeholder">https://site.ru/call/…</string>
     <string name="call_link_support">Звонки → Создать → Скопировать ссылку (не нажимайте \"Завершить\")</string>
+    <string name="call_link_edit">Изменить ссылку на звонок</string>
+    <string name="call_link_empty_error">Введите ссылку на звонок</string>
+    <string name="paste">Вставить</string>
     <string name="local_listen_address">Локальный адрес прослушивания</string>
     <string name="local_listen_placeholder">127.0.0.1:9000</string>
     <string name="local_listen_support">Адрес, на котором клиент принимает трафик от WireGuard/XRay</string>

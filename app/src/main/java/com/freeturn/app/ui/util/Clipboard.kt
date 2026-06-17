@@ -21,3 +21,11 @@ fun Context.copyToClipboard(label: String, text: String, sensitive: Boolean = fa
     }
     cm.setPrimaryClip(clip)
 }
+
+/** Достаёт первый текст из буфера обмена (или null, если буфер пуст/не текст). */
+fun Context.pasteFromClipboard(): String? {
+    val cm = getSystemService(ClipboardManager::class.java) ?: return null
+    return cm.primaryClip
+        ?.takeIf { it.itemCount > 0 }
+        ?.getItemAt(0)?.text?.toString()
+}

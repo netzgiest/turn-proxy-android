@@ -6,11 +6,13 @@
 package com.freeturn.app.ui.screens.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,31 +23,44 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.freeturn.app.R
+import com.freeturn.app.data.HapticUtil
 import com.freeturn.app.data.config.Provider
 import com.freeturn.app.data.server.ServersSnapshot
 import com.freeturn.app.ui.components.ServerRow
 import com.freeturn.app.ui.components.settingsItemShape
+import com.freeturn.app.ui.util.pasteFromClipboard
 import com.freeturn.app.ui.util.redact
 import com.freeturn.app.ui.theme.Spacing
 
@@ -54,10 +69,17 @@ import com.freeturn.app.ui.theme.Spacing
 internal fun ServersSheetContent(
     snapshot: ServersSnapshot,
     privacyMode: Boolean = false,
+    callLink: String = "",
+    // Прокси запущен - правку ссылки на звонок блокируем (новая комната = реконнект).
+    callLinkLocked: Boolean = false,
     onApplyServer: (String) -> Unit = {},
-    onOpenServerSettings: (String) -> Unit = {}
+    onOpenServerSettings: (String) -> Unit = {},
+    onSaveCallLink: (String) -> Unit = {}
 ) {
     val active = snapshot.active
+    // Менять ссылку можно только у сохранённого активного сервера и пока прокси стоит.
+    val callLinkEditable = active != null && !callLinkLocked
+    var showCallLinkDialog by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -109,6 +131,8 @@ internal fun ServersSheetContent(
 
         ProviderChip(
             current = active?.client?.provider ?: Provider.VK,
+            editable = callLinkEditable,
+            onClick = { showCallLinkDialog = true },
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
 
@@ -154,44 +178,158 @@ internal fun ServersSheetContent(
             }
         }
     }
+
+    if (showCallLinkDialog) {
+        CallLinkDialog(
+            initial = callLink,
+            onSave = { showCallLinkDialog = false; onSaveCallLink(it) },
+            onDismiss = { showCallLinkDialog = false }
+        )
+    }
 }
 
-/** Бейдж провайдера TURN-creds. */
+/**
+ * Бейдж провайдера TURN-creds. При [editable] - expressive-кнопка правки ссылки на звонок
+ * (форма морфит при нажатии); иначе статичный бейдж.
+ */
 @Composable
 private fun ProviderChip(
     current: String,
+    editable: Boolean = false,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(start = Spacing.sm, end = Spacing.lg, top = Spacing.sm, bottom = Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    val chipPadding = PaddingValues(start = Spacing.sm, end = Spacing.lg, top = Spacing.sm, bottom = Spacing.sm)
+    if (editable) {
+        // Expressive shape-morph: форма скругляется/сжимается при нажатии (ButtonDefaults.shapes).
+        Button(
+            onClick = onClick,
+            shapes = ButtonDefaults.shapes(),
+            colors = ButtonDefaults.filledTonalButtonColors(),
+            contentPadding = chipPadding,
+            modifier = modifier
         ) {
+            ProviderChipContent(current, showEdit = true)
+        }
+    } else {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            modifier = modifier
+        ) {
+            Row(
+                modifier = Modifier.padding(chipPadding),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                ProviderChipContent(current, showEdit = false)
+            }
+        }
+    }
+}
+
+/** Содержимое бейджа провайдера: brand-иконка + лейбл + (опц.) edit-карандаш. */
+@Composable
+private fun RowScope.ProviderChipContent(current: String, showEdit: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(MaterialTheme.colorScheme.primary, MaterialShapes.Sunny.toShape()),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painterResource(R.drawable.nearby_24px),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(14.dp)
+        )
+    }
+    Text(
+        providerLabel(current),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.padding(start = Spacing.sm)
+    )
+    if (showEdit) {
+        Icon(
+            painterResource(R.drawable.edit_24px),
+            contentDescription = stringResource(R.string.call_link_edit),
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier
+                .padding(start = Spacing.sm)
+                .size(18.dp)
+        )
+    }
+}
+
+/**
+ * Expressive-диалог правки ссылки на звонок: иконка-бейдж в шапке, поле с вставкой
+ * из буфера. Сохранение заблокировано при пустом поле.
+ */
+@Composable
+private fun CallLinkDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var link by rememberSaveable { mutableStateOf(initial) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(40.dp)
                     .background(MaterialTheme.colorScheme.primary, MaterialShapes.Sunny.toShape()),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painterResource(R.drawable.nearby_24px),
+                    painterResource(R.drawable.link_24px),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
-            Text(
-                providerLabel(current),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+        },
+        title = { Text(stringResource(R.string.call_link_label)) },
+        text = {
+            OutlinedTextField(
+                value = link,
+                onValueChange = { link = it },
+                label = { Text(stringResource(R.string.call_link_placeholder)) },
+                supportingText = { Text(stringResource(R.string.call_link_support)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                trailingIcon = {
+                    IconButton(onClick = {
+                        context.pasteFromClipboard()?.takeIf { it.isNotBlank() }?.let {
+                            link = it.trim()
+                            HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
+                        }
+                    }) {
+                        Icon(
+                            painterResource(R.drawable.content_paste_24px),
+                            contentDescription = stringResource(R.string.paste)
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
             )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    HapticUtil.perform(context, HapticUtil.Pattern.SUCCESS)
+                    onSave(link.trim())
+                },
+                enabled = link.isNotBlank()
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
-    }
+    )
 }
 
 @Composable

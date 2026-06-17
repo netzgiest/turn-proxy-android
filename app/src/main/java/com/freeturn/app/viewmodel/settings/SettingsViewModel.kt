@@ -216,6 +216,15 @@ class SettingsViewModel(
         }
     }
 
+    // UI пускает сюда только при остановленном прокси - рестарт не нужен.
+    fun setActiveVkLink(link: String) {
+        viewModelScope.launch {
+            prefs.updateActiveServer {
+                it.copy(client = it.client.copy(vkLink = link.trim()))
+            }
+        }
+    }
+
     fun setSyncServerSwitches(enabled: Boolean) {
         viewModelScope.launch {
             val changed = prefs.updateActiveServer {
