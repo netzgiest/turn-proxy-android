@@ -116,6 +116,7 @@ fun AdvancedScreen(
     onBack: () -> Unit
 ) {
     val nerdMode by settingsViewModel.nerdMode.collectAsStateWithLifecycle()
+    val restartServerOnSwitch by settingsViewModel.restartServerOnSwitch.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -150,6 +151,16 @@ fun AdvancedScreen(
                         iconRes = R.drawable.terminal_24px,
                         checked = nerdMode,
                         onCheckedChange = { settingsViewModel.setNerdMode(it) }
+                    )
+                }
+
+                SettingsCard {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.restart_server_on_switch),
+                        subtitle = stringResource(R.string.restart_server_on_switch_desc),
+                        iconRes = R.drawable.restart_alt_24px,
+                        checked = restartServerOnSwitch,
+                        onCheckedChange = { settingsViewModel.setRestartServerOnSwitch(it) }
                     )
                 }
             }

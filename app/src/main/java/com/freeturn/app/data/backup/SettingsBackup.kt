@@ -11,7 +11,8 @@ data class BackupData(
     val activeId: String?,
     val dynamicTheme: Boolean,
     val nerdMode: Boolean,
-    val privacyMode: Boolean
+    val privacyMode: Boolean,
+    val restartServerOnSwitch: Boolean
 )
 
 /** Сериализация [BackupData] в JSON (серверы - через тот же [ServerJson], что и в DataStore). */
@@ -25,6 +26,7 @@ object SettingsBackup {
         put("dynamicTheme", data.dynamicTheme)
         put("nerdMode", data.nerdMode)
         put("privacyMode", data.privacyMode)
+        put("restartServerOnSwitch", data.restartServerOnSwitch)
     }.toString()
 
     fun decode(json: String): BackupData {
@@ -39,7 +41,8 @@ object SettingsBackup {
             activeId = o.optString("activeId").takeIf { it.isNotBlank() },
             dynamicTheme = o.optBoolean("dynamicTheme", true),
             nerdMode = o.optBoolean("nerdMode", true),
-            privacyMode = o.optBoolean("privacyMode", false)
+            privacyMode = o.optBoolean("privacyMode", false),
+            restartServerOnSwitch = o.optBoolean("restartServerOnSwitch", false)
         )
     }
 }

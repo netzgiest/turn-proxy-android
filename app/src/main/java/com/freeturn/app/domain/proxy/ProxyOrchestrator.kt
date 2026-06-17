@@ -12,6 +12,11 @@ class ProxyOrchestrator(
     private val sshRepository: SshRepository
 ) {
     suspend fun restartServerIfRunning() {
+        // Сессия должна вести на хост активного профиля: после смены профиля она ещё
+        // может указывать на прошлый сервер - иначе рестартнём чужой хост.
+        val active = sshRepository.activeSshConfig ?: return
+        val cfg = prefs.sshConfigFlow.first()
+        if (active.ip != cfg.ip || active.port != cfg.port) return
         val running = (sshRepository.serverState.value as? ServerState.Known)?.running == true
         if (!running) return
         val l = prefs.proxyListenFlow.first()

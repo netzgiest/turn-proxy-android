@@ -82,6 +82,9 @@ class SettingsViewModel(
     val privacyMode: StateFlow<Boolean> = prefs.privacyModeFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val restartServerOnSwitch: StateFlow<Boolean> = prefs.restartServerOnSwitchFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     // Не StateFlow: .value мог бы вернуть дефолт до первого emit DataStore и скипнуть
     // диалог в первую сессию - тут ждём реальное значение.
     suspend fun batteryPromptShownOnce(): Boolean = prefs.batteryPromptShownFlow.first()
@@ -106,6 +109,10 @@ class SettingsViewModel(
 
     fun setPrivacyMode(enabled: Boolean) {
         viewModelScope.launch { prefs.setPrivacyMode(enabled) }
+    }
+
+    fun setRestartServerOnSwitch(enabled: Boolean) {
+        viewModelScope.launch { prefs.setRestartServerOnSwitch(enabled) }
     }
 
     fun setDynamicTheme(enabled: Boolean) {
@@ -187,6 +194,11 @@ class SettingsViewModel(
             val target = prefs.serversSnapshot.first().list.firstOrNull { it.id == id }
                 ?: return@launch
             prefs.setActiveServerId(target.id)
+
+            // Сервер - до прокси: no-op, если сервер не запущен или SSH на другом хосте.
+            if (prefs.restartServerOnSwitchFlow.first()) {
+                orchestrator.restartServerIfRunning()
+            }
 
             if (ProxyServiceState.isRunning.value) {
                 proxyManager.stopProxy()

@@ -37,6 +37,7 @@ class AppPreferences(context: Context) {
         val PRIVACY_MODE = booleanPreferencesKey("privacy_mode")
         val TG_SUBSCRIBE_SHOWN = booleanPreferencesKey("tg_subscribe_shown")
         val BATTERY_PROMPT_SHOWN = booleanPreferencesKey("battery_prompt_shown")
+        val RESTART_SERVER_ON_SWITCH = booleanPreferencesKey("restart_server_on_switch")
         val SERVERS_JSON = stringPreferencesKey("servers_json")
         val ACTIVE_SERVER_ID = stringPreferencesKey("active_server_id")
         val OWN_CLIENT_ID = stringPreferencesKey("own_client_id")
@@ -86,6 +87,10 @@ class AppPreferences(context: Context) {
 
     /** Приватный режим - маскирует чувствительные поля в UI. */
     val privacyModeFlow: Flow<Boolean> = prefFlow { prefs -> prefs[PRIVACY_MODE] ?: false }
+
+    /** При смене активного профиля перезапускать его удалённый сервер под параметры профиля. */
+    val restartServerOnSwitchFlow: Flow<Boolean> =
+        prefFlow { prefs -> prefs[RESTART_SERVER_ON_SWITCH] ?: false }
 
     val tgSubscribeShownFlow: Flow<Boolean> = prefFlow { prefs -> prefs[TG_SUBSCRIBE_SHOWN] ?: false }
 
@@ -216,6 +221,10 @@ class AppPreferences(context: Context) {
         context.dataStore.edit { prefs -> prefs[PRIVACY_MODE] = enabled }
     }
 
+    suspend fun setRestartServerOnSwitch(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[RESTART_SERVER_ON_SWITCH] = enabled }
+    }
+
     suspend fun setTgSubscribeShown() {
         context.dataStore.edit { prefs -> prefs[TG_SUBSCRIBE_SHOWN] = true }
     }
@@ -251,7 +260,8 @@ class AppPreferences(context: Context) {
             activeId = snap.activeId,
             dynamicTheme = dynamicThemeFlow.first(),
             nerdMode = nerdModeFlow.first(),
-            privacyMode = privacyModeFlow.first()
+            privacyMode = privacyModeFlow.first(),
+            restartServerOnSwitch = restartServerOnSwitchFlow.first()
         )
     }
 
@@ -279,6 +289,7 @@ class AppPreferences(context: Context) {
             prefs[DYNAMIC_THEME] = data.dynamicTheme
             prefs[NERD_MODE] = data.nerdMode
             prefs[PRIVACY_MODE] = data.privacyMode
+            prefs[RESTART_SERVER_ON_SWITCH] = data.restartServerOnSwitch
         }
         return added
     }
