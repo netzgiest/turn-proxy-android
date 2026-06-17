@@ -1,5 +1,6 @@
 package com.freeturn.app.data.share
 
+import com.freeturn.app.data.config.ClientConfig
 import org.json.JSONObject
 import java.util.Base64
 
@@ -23,7 +24,8 @@ data class FreeturnLink(
     val dnsServers: String = "",
     val manualCaptcha: Boolean = false,
     val name: String = "",
-    val wgConf: String = ""
+    val wgConf: String = "",
+    val mtu: Int = ClientConfig.DEFAULT_WG_MTU
 ) {
     fun encode(): String {
         val sb = StringBuilder("{")
@@ -45,6 +47,7 @@ data class FreeturnLink(
         if (dnsServers.isNotEmpty()) sb.field("dnss", jsonString(dnsServers))
         if (manualCaptcha) sb.field("mcap", "true")
         if (name.isNotEmpty()) sb.field("name", jsonString(name))
+        if (mtu != ClientConfig.DEFAULT_WG_MTU) sb.field("mtu", mtu.toString())
         if (wgConf.isNotEmpty()) sb.field("wg", jsonString(wgConf))
         sb.append('}')
         return SCHEME + Base64.getUrlEncoder().withoutPadding()
@@ -86,7 +89,8 @@ data class FreeturnLink(
                 dnsServers = o.optString("dnss"),
                 manualCaptcha = o.optBoolean("mcap", false),
                 name = o.optString("name"),
-                wgConf = o.optString("wg")
+                wgConf = o.optString("wg"),
+                mtu = o.optInt("mtu", ClientConfig.DEFAULT_WG_MTU)
             )
         }
 

@@ -40,6 +40,8 @@ data class ClientConfig(
     val wireGuardConfig: String = "",
     /** Имя WG-туннеля для GoBackend. */
     val wireGuardTunnelName: String = TunnelTransport.DEFAULT_TUNNEL_NAME,
+    /** MTU WG-интерфейса. Инжектится в [Interface] при подъёме (в сыром conf не хранится). */
+    val wireGuardMtu: Int = DEFAULT_WG_MTU,
     /** Режим split-tunneling: all | include | exclude. */
     val splitTunnelMode: String = SplitTunnelMode.ALL,
     /** Список package-имён для include/exclude (разделители: запятая/пробел/перенос строки). */
@@ -56,5 +58,10 @@ data class ClientConfig(
     companion object {
         const val DEFAULT_LOCAL_PORT = "127.0.0.1:9000"
         const val DEFAULT_STREAMS_PER_CRED = 6
+        // TURN-релей добавляет overhead - 1280 (минимум IPv6) против фрагментации.
+        const val DEFAULT_WG_MTU = 1280
+        // Диапазон валидного MTU: 1280 = минимум IPv6, 1500 = потолок Ethernet.
+        const val MIN_WG_MTU = 1280
+        const val MAX_WG_MTU = 1500
     }
 }

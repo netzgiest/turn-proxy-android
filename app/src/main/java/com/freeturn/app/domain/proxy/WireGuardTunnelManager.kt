@@ -38,6 +38,7 @@ class WireGuardTunnelManager(context: Context) {
         val endpoint = cfg.localPort.trim()
         val preparedConfig = rawConfig
             .withLocalEndpoint(endpoint)
+            .withMtu(cfg.wireGuardMtu)
             .withSplitTunnel(
                 appPackage = appContext.packageName,
                 mode = cfg.splitTunnelMode,
@@ -105,6 +106,27 @@ private fun String.withLocalEndpoint(endpoint: String): String {
         lines += ""
         lines += "Endpoint = $endpoint"
     }
+    return lines.joinToString("\n")
+}
+
+private fun String.withMtu(mtu: Int): String {
+    if (mtu <= 0) return this
+    var inInterface = false
+    val lines = mutableListOf<String>()
+    lineSequence().forEach { line ->
+        val section = line.trim()
+        if (section.startsWith("[") && section.endsWith("]")) {
+            inInterface = section.equals("[Interface]", ignoreCase = true)
+        }
+        val isMtuLine = inInterface && section.startsWith("MTU", ignoreCase = true) &&
+            section.contains("=")
+        if (!isMtuLine) lines += line
+    }
+    val interfaceIndex = lines.indexOfFirst {
+        it.trim().equals("[Interface]", ignoreCase = true)
+    }
+    if (interfaceIndex < 0) return lines.joinToString("\n")
+    lines.add(interfaceIndex + 1, "MTU = $mtu")
     return lines.joinToString("\n")
 }
 

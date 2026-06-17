@@ -29,14 +29,21 @@ object ShareLinkBuilder {
             obfKey = if (ObfProfile.isValidKey(obfKey)) obfKey else "",
             clientId = clientId.trim(),
             name = userName.trim(),
-            wgConf = wgConf?.let(::normalizeConf).orEmpty()
+            wgConf = wgConf?.let(::normalizeConf).orEmpty(),
+            mtu = server.client.wireGuardMtu
         ).encode()
     }
 
-    /** Срезает комментарии и пустые строки WG-conf - короче ссылка, плотнее QR. */
+    /**
+     * Срезает комментарии, пустые строки и MTU из WG-conf - короче ссылка, плотнее QR.
+     * MTU едет отдельным полем ссылки (единственный источник), в conf не дублируется.
+     */
     internal fun normalizeConf(conf: String): String =
         conf.lineSequence()
             .map { it.trim() }
-            .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith(";") }
+            .filter {
+                it.isNotEmpty() && !it.startsWith("#") && !it.startsWith(";") &&
+                    !(it.startsWith("MTU", ignoreCase = true) && it.contains("="))
+            }
             .joinToString("\n")
 }

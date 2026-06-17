@@ -142,6 +142,7 @@ class ImportViewModel(
                 tunnelTransport = if (wgConf.isNotEmpty()) TunnelTransport.WIREGUARD
                 else TunnelTransport.NONE,
                 wireGuardConfig = wgConf,
+                wireGuardMtu = link.mtu,
                 // cid из ссылки - владелец уже посадил его в allowlist сервера.
                 clientId = link.clientId.trim()
             ),

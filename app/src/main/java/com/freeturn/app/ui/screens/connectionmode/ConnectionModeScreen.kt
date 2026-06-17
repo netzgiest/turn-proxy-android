@@ -99,6 +99,7 @@ fun ConnectionModeScreen(
 
     var wgConfig by remember(saved.wireGuardConfig) { mutableStateOf(saved.wireGuardConfig) }
     var wgName by remember(saved.wireGuardTunnelName) { mutableStateOf(saved.wireGuardTunnelName) }
+    var wgMtu by remember(saved.wireGuardMtu) { mutableStateOf(saved.wireGuardMtu.toString()) }
 
     // Запись WG-настроек: транспорт всегда выставляется вместе с конфигом.
     fun persistWg(vpn: Boolean = isVpn) {
@@ -106,7 +107,10 @@ fun ConnectionModeScreen(
             it.copy(
                 tunnelTransport = if (vpn) TunnelTransport.WIREGUARD else TunnelTransport.NONE,
                 wireGuardConfig = wgConfig.trim(),
-                wireGuardTunnelName = wgName.trim().ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME }
+                wireGuardTunnelName = wgName.trim().ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME },
+                wireGuardMtu = wgMtu.toIntOrNull()
+                    ?.coerceIn(ClientConfig.MIN_WG_MTU, ClientConfig.MAX_WG_MTU)
+                    ?: ClientConfig.DEFAULT_WG_MTU
             )
         }
     }
@@ -118,10 +122,15 @@ fun ConnectionModeScreen(
     // Дебаунс 600 мс для WG-полей.
     var wgDirty by remember(serverId) { mutableStateOf(false) }
     var pendingSave by remember(serverId) { mutableStateOf(false) }
-    LaunchedEffect(wgConfig, wgName) {
+    LaunchedEffect(wgConfig, wgName, wgMtu) {
         if (!wgDirty) { wgDirty = true; return@LaunchedEffect }
         pendingSave = true
         delay(600)
+        // Пустой/вне диапазона MTU подтягиваем в поле к валидному - UI = сохранённое.
+        val normalizedMtu = wgMtu.toIntOrNull()
+            ?.coerceIn(ClientConfig.MIN_WG_MTU, ClientConfig.MAX_WG_MTU)
+            ?: ClientConfig.DEFAULT_WG_MTU
+        if (wgMtu != normalizedMtu.toString()) wgMtu = normalizedMtu.toString()
         persistWg()
         pendingSave = false
     }
@@ -140,6 +149,8 @@ fun ConnectionModeScreen(
                 }
                 if (!text.isNullOrBlank()) {
                     wgConfig = text
+                    // Префилл поля MTU из загруженного conf - поле = единственный источник.
+                    extractMtu(text)?.let { wgMtu = it.toString() }
                     HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
                 }
             }
@@ -216,6 +227,8 @@ fun ConnectionModeScreen(
                         onWgConfig = { wgConfig = it },
                         wgName = wgName,
                         onWgName = { wgName = it },
+                        mtu = wgMtu,
+                        onMtu = { wgMtu = it },
                         privacyMode = privacyMode,
                         onLoadFile = { filePicker.launch("*/*") }
                     )
@@ -251,4 +264,19 @@ fun ConnectionModeScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     }
+}
+
+/** Достаёт MTU из строки `[Interface]` загруженного conf; null - нет валидной строки. */
+private fun extractMtu(conf: String): Int? {
+    var inInterface = false
+    conf.lineSequence().forEach { line ->
+        val section = line.trim()
+        if (section.startsWith("[") && section.endsWith("]")) {
+            inInterface = section.equals("[Interface]", ignoreCase = true)
+        } else if (inInterface && section.startsWith("MTU", ignoreCase = true) &&
+            section.contains("=")) {
+            return section.substringAfter("=").trim().toIntOrNull()?.takeIf { it > 0 }
+        }
+    }
+    return null
 }

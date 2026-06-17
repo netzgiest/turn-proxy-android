@@ -67,6 +67,7 @@ internal object ServerJson {
             put("tunnelTransport", p.client.tunnelTransport)
             put("wireGuardConfig", p.client.wireGuardConfig)
             put("wireGuardTunnelName", p.client.wireGuardTunnelName)
+            put("wireGuardMtu", p.client.wireGuardMtu)
             put("splitTunnelMode", p.client.splitTunnelMode)
             put("splitTunnelApps", p.client.splitTunnelApps)
             put("logsEnabled", p.client.logsEnabled)
@@ -130,6 +131,7 @@ internal object ServerJson {
                 },
                 wireGuardConfig = cliO.optString("wireGuardConfig"),
                 wireGuardTunnelName = cliO.optString("wireGuardTunnelName").ifBlank { TunnelTransport.DEFAULT_TUNNEL_NAME },
+                wireGuardMtu = cliO.optInt("wireGuardMtu", ClientConfig.DEFAULT_WG_MTU),
                 splitTunnelMode = cliO.optString("splitTunnelMode", SplitTunnelMode.ALL).let {
                     if (it in SplitTunnelMode.VALUES) it else SplitTunnelMode.ALL
                 },
